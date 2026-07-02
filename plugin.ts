@@ -1,12 +1,14 @@
 import { AgentCommandService } from "@tokenring-ai/agent";
 import type { TokenRingPlugin } from "@tokenring-ai/app";
 import { ChatService } from "@tokenring-ai/chat";
+import { RpcService } from "@tokenring-ai/rpc";
 import { WebHostService } from "@tokenring-ai/web-host";
 import type { BunRouter } from "@tokenring-ai/web-host/types";
 import { z } from "zod";
 import agentCommands from "./commands.ts";
 import MediaLibraryService from "./MediaLibraryService.ts";
 import packageJSON from "./package.json" with { type: "json" };
+import mediaLibraryRPC from "./rpc/mediaLibrary.ts";
 import { MediaLibraryServiceConfigSchema } from "./schema.ts";
 import tools from "./tools.ts";
 
@@ -24,6 +26,9 @@ export default {
     app.addServices(mediaLibrary);
     app.waitForService(ChatService, chatService => chatService.addTools(...tools));
     app.waitForService(AgentCommandService, agentCommandService => agentCommandService.addAgentCommands(agentCommands));
+    app.waitForService(RpcService, rpcService => {
+      rpcService.registerEndpoint(mediaLibraryRPC);
+    });
     app.waitForService(WebHostService, webHostService => {
       webHostService.registerResource("Media Library Files", {
         register(router: BunRouter) {
