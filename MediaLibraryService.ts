@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import type Agent from "@tokenring-ai/agent/Agent";
 import type { AgentCreationContext } from "@tokenring-ai/agent/types";
 import type { TokenRingService } from "@tokenring-ai/app/types";
@@ -5,9 +7,7 @@ import FileSystemService from "@tokenring-ai/filesystem/FileSystemService";
 import deepClone from "@tokenring-ai/utility/object/deepClone";
 import { generateHumanId } from "@tokenring-ai/utility/string/generateHumanId";
 import { exiftool } from "exiftool-vendored";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { MediaLibraryAgentConfigSchema, type MediaKind, type MediaLibraryEntry, MediaLibraryEntrySchema, type ParsedMediaLibraryConfig } from "./schema.ts";
+import { type MediaKind, MediaLibraryAgentConfigSchema, type MediaLibraryEntry, MediaLibraryEntrySchema, type ParsedMediaLibraryConfig } from "./schema.ts";
 import { MediaLibraryState } from "./state/MediaLibraryState.ts";
 
 type WriteMediaOptions = {
@@ -151,16 +151,9 @@ export default class MediaLibraryService implements TokenRingService {
       for (const line of content.trim().split("\n")) {
         if (!line.trim()) continue;
         try {
-          const parsed = JSON.parse(line);
-          const kind = parsed.kind ?? kindFromFile(parsed.filename, parsed.mimeType);
-          if (!kind) continue;
-          entries.push(
-            MediaLibraryEntrySchema.parse({
-              ...parsed,
-              kind,
-              keywords: parsed.keywords ?? [],
-            }),
-          );
+          const parsed = JSON.parse(line) as unknown;
+          const entry = MediaLibraryEntrySchema.parse(parsed);
+          entries.push(entry);
         } catch {
           // Ignore malformed index entries.
         }
