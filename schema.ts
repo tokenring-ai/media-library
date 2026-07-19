@@ -1,3 +1,4 @@
+import type { ConfigFieldMeta } from "@tokenring-ai/app/config/metadata";
 import { z } from "zod";
 
 export const MediaKindSchema = z.enum(["image", "video", "audio"]);
@@ -25,12 +26,19 @@ export const MediaLibraryAgentConfigSchema = z
   })
   .default({});
 
-export const MediaLibraryServiceConfigSchema = z.object({
-  staticPath: z.string().default("/api/media"),
-  agentDefaults: z.object({
-    outputDirectory: z.string(),
-  }),
-});
+export const MediaLibraryServiceConfigSchema = z
+  .object({
+    staticPath: z
+      .string()
+      .default("/api/media")
+      .meta({ restartRequired: true, advanced: true, description: "URL path media files are served under" } satisfies ConfigFieldMeta),
+    agentDefaults: z
+      .object({
+        outputDirectory: z.string().meta({ description: "Directory generated media files are written to" } satisfies ConfigFieldMeta),
+      })
+      .meta({ label: "Agent Defaults" } satisfies ConfigFieldMeta),
+  })
+  .meta({ label: "Media Library", description: "Storage for agent-generated images, video, and audio" } satisfies ConfigFieldMeta);
 
 export type MediaLibraryServiceConfig = z.input<typeof MediaLibraryServiceConfigSchema>;
 export type ParsedMediaLibraryConfig = z.output<typeof MediaLibraryServiceConfigSchema>;
