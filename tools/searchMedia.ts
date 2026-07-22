@@ -10,10 +10,13 @@ async function execute({ query, kind, limit }: z.output<typeof inputSchema>, age
   const mediaLibrary = agent.requireServiceByType(MediaLibraryService);
   const results = await mediaLibrary.search(query, { kind, limit }, agent);
 
-  return JSON.stringify({
-    results,
-    message: `Found ${results.length} media files matching "${query}"`,
-  });
+  return {
+    message: `**Media Library** Searched for ${query}`,
+    result: JSON.stringify({
+      results,
+      message: `Found ${results.length} media files matching "${query}"`,
+    }),
+  };
 }
 
 const description = "Search for media library entries by filename, prompt, or keywords";
