@@ -7,7 +7,14 @@ import FileSystemService from "@tokenring-ai/filesystem/FileSystemService";
 import deepClone from "@tokenring-ai/utility/object/deepClone";
 import { generateHumanId } from "@tokenring-ai/utility/string/generateHumanId";
 import { exiftool } from "exiftool-vendored";
-import { type MediaKind, MediaLibraryAgentConfigSchema, type MediaLibraryEntry, MediaLibraryEntrySchema, type ParsedMediaLibraryConfig } from "./schema.ts";
+import {
+  type MediaKind,
+  MediaLibraryAgentConfigSchema,
+  type MediaLibraryEntry,
+  MediaLibraryEntrySchema,
+  MediaLibraryServiceConfigSchema,
+  type ParsedMediaLibraryConfig,
+} from "./schema.ts";
 import { MediaLibraryState } from "./state/MediaLibraryState.ts";
 
 type WriteMediaOptions = {
@@ -75,7 +82,15 @@ export default class MediaLibraryService implements TokenRingService {
   readonly name = "MediaLibraryService";
   description = "Shared media library storage, indexing, search, and static serving";
 
-  constructor(private options: ParsedMediaLibraryConfig) {}
+  private options = MediaLibraryServiceConfigSchema.parse({});
+
+  constructor(options?: ParsedMediaLibraryConfig) {
+    if (options) this.options = options;
+  }
+
+  reconfigure(options: ParsedMediaLibraryConfig): void {
+    this.options = options;
+  }
 
   attach(agent: Agent, creationContext: AgentCreationContext): void {
     const agentConfig = deepClone(this.options.agentDefaults, agent.getAgentConfigSlice("mediaLibrary", MediaLibraryAgentConfigSchema));

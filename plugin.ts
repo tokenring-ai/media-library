@@ -21,8 +21,8 @@ export default {
   displayName: "Media Library",
   version: packageJSON.version,
   description: packageJSON.description,
-  install(app, config) {
-    const mediaLibrary = new MediaLibraryService(config.mediaLibrary);
+  install(app) {
+    const mediaLibrary = new MediaLibraryService();
     app.addServices(mediaLibrary);
     app.waitForService(ChatService, chatService => chatService.addTools(...tools));
     app.waitForService(AgentCommandService, agentCommandService => agentCommandService.addAgentCommands(agentCommands));
@@ -37,6 +37,9 @@ export default {
         },
       });
     });
+  },
+  reconfigure(app, config) {
+    app.requireService(MediaLibraryService).reconfigure(config.mediaLibrary);
   },
   configSchema: packageConfigSchema,
 } satisfies TokenRingPlugin<typeof packageConfigSchema>;

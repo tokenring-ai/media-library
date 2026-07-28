@@ -34,10 +34,15 @@ export const MediaLibraryServiceConfigSchema = z
       .meta({ restartRequired: true, advanced: true, description: "URL path media files are served under" } satisfies ConfigFieldMeta),
     agentDefaults: z
       .object({
-        outputDirectory: z.string().meta({ description: "Directory generated media files are written to" } satisfies ConfigFieldMeta),
+        outputDirectory: z
+          .string()
+          .default("media-library")
+          .meta({ description: "Directory generated media files are written to" } satisfies ConfigFieldMeta),
       })
+      .prefault({})
       .meta({ label: "Agent Defaults" } satisfies ConfigFieldMeta),
   })
+  .prefault({})
   .meta({ label: "Media Library", description: "Storage for agent-generated images, video, and audio" } satisfies ConfigFieldMeta);
 
 export type MediaLibraryServiceConfig = z.input<typeof MediaLibraryServiceConfigSchema>;
