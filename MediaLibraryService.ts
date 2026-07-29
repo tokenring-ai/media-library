@@ -110,6 +110,29 @@ export default class MediaLibraryService implements TokenRingService {
     return agent.getState(MediaLibraryState).outputDirectory;
   }
 
+  getSelectedMedia(agent: Agent): { filename: string; kind?: MediaKind } | null {
+    const state = agent.getState(MediaLibraryState);
+    if (!state.selectedFilename) return null;
+    return {
+      filename: state.selectedFilename,
+      ...(state.selectedKind !== undefined && { kind: state.selectedKind }),
+    };
+  }
+
+  selectMedia(filename: string, agent: Agent, kind?: MediaKind): void {
+    agent.mutateState(MediaLibraryState, state => {
+      state.selectedFilename = filename;
+      state.selectedKind = kind;
+    });
+  }
+
+  clearSelectedMedia(agent: Agent): void {
+    agent.mutateState(MediaLibraryState, state => {
+      state.selectedFilename = undefined;
+      state.selectedKind = undefined;
+    });
+  }
+
   getIndexPath(directory: string): string {
     return `${directory}/media_index.json`;
   }

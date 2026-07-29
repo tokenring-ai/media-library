@@ -1,6 +1,7 @@
 import type { RPCSchema } from "@tokenring-ai/rpc/types";
+import { AgentNotFoundSchema, SuccessSchema } from "@tokenring-ai/rpc/types";
 import { z } from "zod";
-import { MediaLibraryEntrySchema } from "../schema.ts";
+import { MediaKindSchema, MediaLibraryEntrySchema } from "../schema.ts";
 
 export const AudioIndexEntrySchema = MediaLibraryEntrySchema.extend({
   kind: z.literal("audio"),
@@ -94,6 +95,35 @@ export default {
         videos: z.array(VideoIndexEntrySchema),
         count: z.number(),
       }),
+    },
+    getMediaLibraryState: {
+      type: "query",
+      input: z.object({
+        agentId: z.string(),
+      }),
+      result: z.discriminatedUnion("status", [
+        SuccessSchema.extend({
+          selectedFilename: z.string().nullable(),
+          selectedKind: MediaKindSchema.nullable(),
+        }),
+        AgentNotFoundSchema,
+      ]),
+    },
+    updateMediaLibraryState: {
+      type: "mutation",
+      input: z.object({
+        agentId: z.string(),
+        selectedFilename: z.string().exactOptional(),
+        selectedKind: MediaKindSchema.exactOptional(),
+        clearSelection: z.boolean().exactOptional(),
+      }),
+      result: z.discriminatedUnion("status", [
+        SuccessSchema.extend({
+          selectedFilename: z.string().nullable(),
+          selectedKind: MediaKindSchema.nullable(),
+        }),
+        AgentNotFoundSchema,
+      ]),
     },
   },
 } satisfies RPCSchema;

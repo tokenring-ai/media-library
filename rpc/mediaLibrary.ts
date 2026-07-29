@@ -1,7 +1,9 @@
+import { AgentManager } from "@tokenring-ai/agent";
 import type TokenRingApp from "@tokenring-ai/app";
 import { createPollingQueryStream } from "@tokenring-ai/rpc/createPollingQueryStream";
 import { createRPCEndpoint } from "@tokenring-ai/rpc/createRPCEndpoint";
 import MediaLibraryService from "../MediaLibraryService.ts";
+import { MediaLibraryState } from "../state/MediaLibraryState.ts";
 import MediaLibraryRpcSchema from "./schema.ts";
 
 async function projectAudios(args: { search?: string; limit?: number }, app: TokenRingApp) {
@@ -106,4 +108,40 @@ export default createRPCEndpoint(MediaLibraryRpcSchema, {
   },
 
   streamVideos,
+
+  getMediaLibraryState(args, app: TokenRingApp) {
+    const agent = app.requireService(AgentManager).getAgent(args.agentId);
+    if (!agent) {
+      return { status: "agentNotFound" };
+    }
+
+    const state = agent.getState(MediaLibraryState);
+    return {
+      status: "success",
+      selectedFilename: state.selectedFilename ?? null,
+      selectedKind: state.selectedKind ?? null,
+    };
+  },
+
+  updateMediaLibraryState(args, app: TokenRingApp) {
+    const agent = app.requireService(AgentManager).getAgent(args.agentId);
+    if (!agent) {
+      return { status: "agentNotFound" };
+    }
+
+    const mediaLibrary = app.requireService(MediaLibraryService);
+
+    if (args.clearSelection) {
+      mediaLibrary.clearSelectedMedia(agent);
+    } else if (args.selectedFilename) {
+      mediaLibrary.selectMedia(args.selectedFilename, agent, args.selectedKind);
+    }
+
+    const state = agent.getState(MediaLibraryState);
+    return {
+      status: "success",
+      selectedFilename: state.selectedFilename ?? null,
+      selectedKind: state.selectedKind ?? null,
+    };
+  },
 });
