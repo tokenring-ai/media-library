@@ -162,7 +162,7 @@ The service manages media directory state, index writes, index reads, search, an
 ```typescript
 import { MediaLibraryService } from "@tokenring-ai/media-library";
 
-const mediaLibrary = agent.requireServiceByType(MediaLibraryService);
+const mediaLibrary = agent.requireService(MediaLibraryService);
 ```
 
 ### Methods

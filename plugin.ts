@@ -26,10 +26,10 @@ export default {
   description: packageJSON.description,
   config,
   install(app) {
-    const mediaLibrary = new MediaLibraryService();
-    app.addServices(mediaLibrary);
+    const mediaLibrary = app.addService(new MediaLibraryService());
+
     app.waitForService(AgentLifecycleService, lifecycleService => lifecycleService.addHooks(addSelectedMedia));
-    app.waitForService(ChatService, chatService => chatService.addTools(...tools));
+    app.waitForService(ChatService, chatService => chatService.addTools(tools));
     app.waitForService(AgentCommandService, agentCommandService => agentCommandService.addAgentCommands(agentCommands));
     app.waitForService(RpcService, rpcService => {
       rpcService.registerEndpoint(mediaLibraryRPC);

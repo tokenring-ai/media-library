@@ -142,7 +142,7 @@ export default class MediaLibraryService implements TokenRingService {
   }
 
   async writeMedia(options: WriteMediaOptions, agent: Agent): Promise<MediaLibraryEntry & { filePath: string; buffer: Buffer }> {
-    const fileSystem = agent.requireServiceByType(FileSystemService);
+    const fileSystem = agent.requireService(FileSystemService);
     const targetDir = this.getOutputDirectory(agent);
     const extension = options.extension ?? extensionFromMimeType(options.mimeType);
     const filename = options.filename ?? `${generateHumanId()}.${extension}`;
@@ -169,7 +169,7 @@ export default class MediaLibraryService implements TokenRingService {
   }
 
   async addToIndex(entry: MediaLibraryEntry, agent: Agent): Promise<void> {
-    const fileSystem = agent.requireServiceByType(FileSystemService);
+    const fileSystem = agent.requireService(FileSystemService);
     const targetDir = this.getOutputDirectory(agent);
     await fileSystem.appendFile(this.getIndexPath(targetDir), JSON.stringify(MediaLibraryEntrySchema.parse(entry)) + "\n", agent);
   }
@@ -236,7 +236,7 @@ export default class MediaLibraryService implements TokenRingService {
 
   async reindex(agent: Agent, kinds: MediaKind[] = ["image", "video", "audio"]): Promise<number> {
     const targetDir = this.getOutputDirectory(agent);
-    const fileSystem = agent.requireServiceByType(FileSystemService);
+    const fileSystem = agent.requireService(FileSystemService);
     const extensions = [
       ...(kinds.includes("image") ? IMAGE_EXTENSIONS : []),
       ...(kinds.includes("video") ? VIDEO_EXTENSIONS : []),

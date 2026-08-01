@@ -7,7 +7,7 @@ const name = "media_search";
 const displayName = "Media Library/search";
 
 async function execute({ query, kind, limit }: z.output<typeof inputSchema>, agent: Agent): Promise<TokenRingToolResult> {
-  const mediaLibrary = agent.requireServiceByType(MediaLibraryService);
+  const mediaLibrary = agent.requireService(MediaLibraryService);
   const results = await mediaLibrary.search(query, { kind, limit }, agent);
 
   return {

@@ -4,7 +4,7 @@ import MediaLibraryService from "../MediaLibraryService.ts";
 const inputSchema = {} as const satisfies AgentCommandInputSchema;
 
 async function execute({ agent }: AgentCommandInputType<typeof inputSchema>): Promise<string> {
-  const mediaLibrary = agent.requireServiceByType(MediaLibraryService);
+  const mediaLibrary = agent.requireService(MediaLibraryService);
   const count = await mediaLibrary.reindex(agent);
   return `Media library re-indexed successfully. ${count} files indexed.`;
 }
