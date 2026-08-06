@@ -93,8 +93,11 @@ export default class MediaLibraryService implements TokenRingService {
   }
 
   attach(agent: Agent, creationContext: AgentCreationContext): void {
-    const agentConfig = deepClone(this.options.agentDefaults, agent.getAgentConfigSlice("mediaLibrary", MediaLibraryAgentConfigSchema));
-    const initialState = agent.initializeState(MediaLibraryState, agentConfig);
+    const { outputDirectory, ...agentConfig } = deepClone(this.options.agentDefaults, agent.getAgentConfigSlice("mediaLibrary", MediaLibraryAgentConfigSchema));
+    const initialState = agent.initializeState(MediaLibraryState, {
+      outputDirectory: agent.app.getWorkspaceResolvedPath(outputDirectory),
+      ...agentConfig,
+    });
     creationContext.items.push(`Media Library Directory: ${initialState.outputDirectory}`);
   }
 

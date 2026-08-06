@@ -3,8 +3,7 @@ import type { TokenRingPlugin } from "@tokenring-ai/app";
 import { ChatService } from "@tokenring-ai/chat";
 import { AgentLifecycleService } from "@tokenring-ai/lifecycle";
 import { RpcService } from "@tokenring-ai/rpc";
-import { WebHostService } from "@tokenring-ai/web-host";
-import type { BunRouter } from "@tokenring-ai/web-host/types";
+import { StaticResource, WebHostService } from "@tokenring-ai/web-host";
 import { z } from "zod";
 import agentCommands from "./commands.ts";
 import config from "./config/index.ts";
@@ -35,12 +34,13 @@ export default {
       rpcService.registerEndpoint(mediaLibraryRPC);
     });
     app.waitForService(WebHostService, webHostService => {
-      webHostService.registerResource("Media Library Files", {
-        register(router: BunRouter) {
-          router.static(mediaLibrary.getStaticPath(), mediaLibrary.getDefaultOutputDirectory());
-          return Promise.resolve();
-        },
-      });
+      webHostService.registerResource(
+        "Media Library Files",
+        new StaticResource({
+          root: mediaLibrary.getDefaultOutputDirectory(),
+          prefix: mediaLibrary.getStaticPath(),
+        }),
+      );
     });
   },
   reconfigure(app, config) {
