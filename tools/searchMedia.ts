@@ -1,5 +1,6 @@
 import type Agent from "@tokenring-ai/agent/Agent";
 import type { TokenRingToolDefinition, TokenRingToolResult } from "@tokenring-ai/chat/schema";
+import markdownTable from "@tokenring-ai/utility/string/markdownTable";
 import { z } from "zod";
 import MediaLibraryService from "../MediaLibraryService.ts";
 
@@ -10,12 +11,23 @@ async function execute({ query, kind, limit }: z.output<typeof inputSchema>, age
   const mediaLibrary = agent.requireService(MediaLibraryService);
   const results = await mediaLibrary.search(query, { kind, limit }, agent);
 
+  if (results.length === 0) {
+    return {
+      message: `**Media Library** Searched for ${query}`,
+      result: `No media files matching "${query}" were found.`,
+    };
+  }
+
   return {
-    message: `**Media Library** Searched for ${query}`,
-    result: JSON.stringify({
-      results,
-      message: `Found ${results.length} media files matching "${query}"`,
-    }),
+    message: `**Media Library** Found ${results.length} media file(s) matching "${query}"`,
+    result: `
+Found ${results.length} media file(s) matching "${query}":
+
+${markdownTable(
+  ["Score", "Kind", "Filename", "Prompt", "Keywords"],
+  results.map(entry => [entry.score.toFixed(2), entry.kind, entry.filename, entry.prompt ?? "—", entry.keywords.length > 0 ? entry.keywords.join(", ") : "—"]),
+)}
+`.trim(),
   };
 }
 

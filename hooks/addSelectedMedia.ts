@@ -1,4 +1,4 @@
-import { AfterInputReceived } from "@tokenring-ai/agent";
+import { BeforeInputReceived } from "@tokenring-ai/agent";
 import type Agent from "@tokenring-ai/agent/Agent";
 import type { HookSubscription } from "@tokenring-ai/lifecycle/types";
 import { HookCallback } from "@tokenring-ai/lifecycle/util/hooks";
@@ -8,13 +8,12 @@ const name = "addSelectedMedia";
 const displayName = "Media Library/Tag currently selected media in chat";
 const description = "Tags the currently selected media library item by filename only (does not attach the media file)";
 
-async function addSelectedMedia(data: AfterInputReceived, agent: Agent) {
+async function addSelectedMedia(data: BeforeInputReceived, agent: Agent) {
   const attachments = (data.input.attachments ??= []);
   agent.mutateState(MediaLibraryState, state => {
     if (!state.selectedFilename) return;
     if (state.lastAttachedFilename === state.selectedFilename) return;
 
-    state.lastAttachedFilename = state.selectedFilename;
     const kindLabel = state.selectedKind ? `${state.selectedKind} ` : "";
     attachments.push({
       name: state.selectedFilename,
@@ -23,10 +22,12 @@ async function addSelectedMedia(data: AfterInputReceived, agent: Agent) {
       mimeType: "text/plain",
       body: state.selectedFilename,
     });
+    // Only mark as attached after the attachment was successfully pushed.
+    state.lastAttachedFilename = state.selectedFilename;
   });
 }
 
-const callbacks = [new HookCallback(AfterInputReceived, addSelectedMedia)];
+const callbacks = [new HookCallback(BeforeInputReceived, addSelectedMedia)];
 
 export default {
   name,

@@ -31,7 +31,6 @@ agents:
         - media_*
         - image_*
         - video_*
-        - voice_*
         - audio_*
         - todo
         - file_*

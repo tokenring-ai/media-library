@@ -7,20 +7,17 @@ Shared media storage, indexing, search, and static serving for TokenRing media p
 This package provides a common media library for images, videos, and audio. Generation and editing packages use it for
 file naming, output directory management, metadata indexing, search, and static web serving.
 
-Media entries are stored as newline-delimited JSON in `media_index.json` inside the configured media directory. The
-library also reads the legacy `image_index.json` file when listing existing image entries, so older generated image
-libraries remain visible.
+Media entries are stored as newline-delimited JSON in `media_index.json` inside the configured media directory.
 
 ## Key Features
 
-- **Shared Media Storage**: One configured directory for images, videos, and audio
+- **Shared Media Storage**: One workspace/plugin-level directory for images, videos, and audio
 - **Automatic Indexing**: Writes metadata entries for generated or imported media
 - **Reindexing**: Scans existing files and rebuilds `media_index.json`
 - **Media Search**: Search filenames, prompts, and keywords with similarity scoring
 - **Static Serving**: Serves media files through `@tokenring-ai/web-host`
-- **Agent State**: Per-agent media directory overrides through `MediaLibraryState`
+- **Agent State**: Per-agent selection tracking through `MediaLibraryState`
 - **Metadata Support**: Stores dimensions, duration, sample rate, channels, keywords, prompts, MIME type, and timestamps
-- **Legacy Compatibility**: Reads existing `image_index.json` entries alongside the new media index
 
 ## Installation
 
@@ -34,9 +31,7 @@ Configure the media library plugin in your application config:
 
 ```yaml
 mediaLibrary:
-  staticPath: /api/media
-  agentDefaults:
-    outputDirectory: ./.tokenring/media-library
+  outputDirectory: media-library
 ```
 
 ### Configuration Schema
@@ -45,19 +40,19 @@ mediaLibrary:
 import { MediaLibraryServiceConfigSchema } from "@tokenring-ai/media-library";
 
 MediaLibraryServiceConfigSchema = z.object({
-  staticPath: z.string().default("/api/media"),
-  agentDefaults: z.object({
-    outputDirectory: z.string(),
-  }),
+  outputDirectory: z.string().default("media-library"),
+  agentTypes: z.array(z.string()).default([
+    "media", "image", "imageGeneration", "video", "videoGeneration", "audio", "voice",
+  ]),
 });
 ```
 
 **Configuration Options:**
 
-| Field                            | Type     | Required | Description                                      |
-|----------------------------------|----------|----------|--------------------------------------------------|
-| `staticPath`                     | `string` | No       | Web path used to serve media. Default: `/api/media` |
-| `agentDefaults.outputDirectory`  | `string` | Yes      | Directory where media files and indexes are stored |
+| Field             | Type       | Required | Description                                          |
+|-------------------|------------|----------|------------------------------------------------------|
+| `outputDirectory` | `string`   | No       | Workspace-level directory for media files and indexes. Default: `media-library` |
+| `agentTypes`      | `string[]` | No       | Agent types offered for media library work in the UI. Default: `media`, `image`, `imageGeneration`, `video`, `videoGeneration`, `audio`, `voice` |
 
 ## Media Index
 
@@ -169,14 +164,13 @@ const mediaLibrary = agent.requireService(MediaLibraryService);
 
 | Method | Description |
 |--------|-------------|
-| `getStaticPath()` | Return the configured static web path |
-| `getDefaultOutputDirectory()` | Return the application default media directory |
-| `getOutputDirectory(agent)` | Return the active agent media directory |
+| `getOutputDirectory()` | Return the workspace/plugin media directory |
 | `writeMedia(options, agent)` | Write a media buffer, add it to the index, and return file details |
 | `addToIndex(entry, agent)` | Append an existing media entry to `media_index.json` |
-| `getEntriesFromDirectory(directory, options)` | Read indexed entries from a directory |
+| `getEntriesFromDirectory(directory, options, agent?)` | Read indexed entries from a directory |
 | `search(query, options, agent)` | Search indexed media entries |
 | `reindex(agent, kinds?)` | Rebuild the media index by scanning files |
+| `stop()` | End the exiftool process (plugin teardown) |
 
 ### writeMedia Example
 
@@ -196,15 +190,19 @@ const media = await mediaLibrary.writeMedia(
 console.log(media.filePath);
 ```
 
-## Web Host Integration
+## HTTP Access
 
-The plugin registers a static web resource with `@tokenring-ai/web-host`:
+Media files are served by the filesystem plugin over HTTP (not by this package):
 
 ```text
-/api/media/<filename>
+/api/fs/{provider}/{outputDirectory}/<filename>
 ```
 
-The path can be changed with `mediaLibrary.staticPath`.
+Example with defaults (`posix` provider, `media-library` directory):
+
+```text
+/api/fs/posix/media-library/panda.png
+```
 
 ## Related Packages
 

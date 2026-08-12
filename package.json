@@ -1,7 +1,7 @@
 {
   "name": "@tokenring-ai/media-library",
   "version": "0.2.0",
-  "description": "Shared media library storage, indexing, search, and static serving for TokenRing media packages.",
+  "description": "Shared media library storage, indexing, and search for TokenRing media packages.",
   "dependencies": {
     "@tokenring-ai/agent": "workspace:*",
     "@tokenring-ai/app": "workspace:*",
@@ -10,7 +10,6 @@
     "@tokenring-ai/lifecycle": "workspace:*",
     "@tokenring-ai/rpc": "workspace:*",
     "@tokenring-ai/utility": "workspace:*",
-    "@tokenring-ai/web-host": "workspace:*",
     "exiftool-vendored": "^36.1.0",
     "zod": "^4.4.3"
   },

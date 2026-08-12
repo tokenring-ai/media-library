@@ -3,111 +3,95 @@ import type TokenRingApp from "@tokenring-ai/app";
 import { createPollingQueryStream } from "@tokenring-ai/rpc/createPollingQueryStream";
 import { createRPCEndpoint } from "@tokenring-ai/rpc/createRPCEndpoint";
 import MediaLibraryService from "../MediaLibraryService.ts";
+import type { MediaKind, MediaLibraryEntry } from "../schema.ts";
 import { MediaLibraryState } from "../state/MediaLibraryState.ts";
+import type { MediaIndexEntry } from "./schema.ts";
 import MediaLibraryRpcSchema from "./schema.ts";
 
-async function projectAudios(args: { search?: string; limit?: number }, app: TokenRingApp) {
-  const mediaLibrary = app.requireService(MediaLibraryService);
-  const audios = await mediaLibrary.getEntriesFromDirectory(mediaLibrary.getDefaultOutputDirectory(), {
+type MediaListArgs = {
+  search?: string;
+  limit?: number;
+  kind?: MediaKind[];
+};
+
+function projectMediaEntry(entry: MediaLibraryEntry): MediaIndexEntry {
+  const base = {
+    filename: entry.filename,
+    mimeType: entry.mimeType,
+    keywords: entry.keywords,
+    ...(entry.prompt !== undefined && { prompt: entry.prompt }),
+    ...(entry.createdAt !== undefined && { createdAt: entry.createdAt }),
+  };
+
+  if (entry.kind === "image") {
+    return {
+      kind: "image",
+      ...base,
+      ...(entry.width !== undefined && { width: entry.width }),
+      ...(entry.height !== undefined && { height: entry.height }),
+    };
+  }
+
+  if (entry.kind === "video") {
+    return {
+      kind: "video",
+      ...base,
+      ...(entry.width !== undefined && { width: entry.width }),
+      ...(entry.height !== undefined && { height: entry.height }),
+      ...(entry.duration !== undefined && { duration: entry.duration }),
+    };
+  }
+
+  return {
     kind: "audio",
-    search: args.search,
-  });
-  const limitedAudios = audios.slice(0, args.limit ?? 200);
-
-  return {
-    audios: limitedAudios.map(audio => ({
-      kind: "audio" as const,
-      filename: audio.filename,
-      mimeType: audio.mimeType,
-      keywords: audio.keywords,
-      ...(audio.duration !== undefined && { duration: audio.duration }),
-      ...(audio.sampleRate !== undefined && { sampleRate: audio.sampleRate }),
-      ...(audio.channels !== undefined && { channels: audio.channels }),
-      ...(audio.prompt !== undefined && { prompt: audio.prompt }),
-      ...(audio.createdAt !== undefined && { createdAt: audio.createdAt }),
-    })),
-    count: audios.length,
+    ...base,
+    ...(entry.duration !== undefined && { duration: entry.duration }),
+    ...(entry.sampleRate !== undefined && { sampleRate: entry.sampleRate }),
+    ...(entry.channels !== undefined && { channels: entry.channels }),
   };
 }
 
-async function projectImages(args: { search?: string; limit?: number }, app: TokenRingApp) {
+async function projectMedia(args: MediaListArgs, app: TokenRingApp) {
   const mediaLibrary = app.requireService(MediaLibraryService);
-  const images = await mediaLibrary.getEntriesFromDirectory(mediaLibrary.getDefaultOutputDirectory(), {
-    kind: "image",
+  // Absolute workspace path so Node-fs reads work without an agent.
+  let entries = await mediaLibrary.getEntriesFromDirectory(mediaLibrary.getOutputDirectory(), {
     search: args.search,
   });
-  const limitedImages = images.slice(0, args.limit ?? 200);
+
+  if (args.kind !== undefined) {
+    const kinds = new Set(args.kind);
+    entries = entries.filter(entry => kinds.has(entry.kind));
+  }
+
+  const limited = entries.slice(0, args.limit ?? 200);
 
   return {
-    images: limitedImages.map(image => ({
-      kind: "image" as const,
-      filename: image.filename,
-      mimeType: image.mimeType,
-      width: image.width ?? 0,
-      height: image.height ?? 0,
-      keywords: image.keywords,
-    })),
-    count: images.length,
+    media: limited.map(projectMediaEntry),
+    count: entries.length,
   };
 }
 
-async function projectVideos(args: { search?: string; limit?: number }, app: TokenRingApp) {
-  const mediaLibrary = app.requireService(MediaLibraryService);
-  const videos = await mediaLibrary.getEntriesFromDirectory(mediaLibrary.getDefaultOutputDirectory(), {
-    kind: "video",
-    search: args.search,
-  });
-  const limitedVideos = videos.slice(0, args.limit ?? 200);
-
-  return {
-    videos: limitedVideos.map(video => ({
-      kind: "video" as const,
-      filename: video.filename,
-      mimeType: video.mimeType,
-      keywords: video.keywords,
-      ...(video.width !== undefined && { width: video.width }),
-      ...(video.height !== undefined && { height: video.height }),
-      ...(video.duration !== undefined && { duration: video.duration }),
-      ...(video.prompt !== undefined && { prompt: video.prompt }),
-      ...(video.createdAt !== undefined && { createdAt: video.createdAt }),
-    })),
-    count: videos.length,
-  };
-}
-
-const streamAudios = createPollingQueryStream({
+const streamMedia = createPollingQueryStream({
   intervalMs: 10000,
-  poll: projectAudios,
-});
-
-const streamImages = createPollingQueryStream({
-  intervalMs: 10000,
-  poll: projectImages,
-});
-
-const streamVideos = createPollingQueryStream({
-  intervalMs: 10000,
-  poll: projectVideos,
+  poll: projectMedia,
 });
 
 export default createRPCEndpoint(MediaLibraryRpcSchema, {
-  async getAudios(args, app: TokenRingApp) {
-    return projectAudios(args, app);
+  getMediaLibraryConfiguration(_args, app: TokenRingApp) {
+    const mediaLibrary = app.requireService(MediaLibraryService);
+
+    return {
+      agentTypes: mediaLibrary.getAgentTypes(),
+      outputDirectory: mediaLibrary.getOutputDirectoryName(),
+      serveDirectory: mediaLibrary.getServeDirectory(),
+    };
   },
 
-  streamAudios,
-
-  async getImages(args, app: TokenRingApp) {
-    return projectImages(args, app);
+  async getMedia(args, app: TokenRingApp) {
+    return projectMedia(args, app);
   },
 
-  streamImages,
-
-  async getVideos(args, app: TokenRingApp) {
-    return projectVideos(args, app);
-  },
-
-  streamVideos,
+  streamMedia,
 
   getMediaLibraryState(args, app: TokenRingApp) {
     const agent = app.requireService(AgentManager).getAgent(args.agentId);
@@ -135,6 +119,8 @@ export default createRPCEndpoint(MediaLibraryRpcSchema, {
       mediaLibrary.clearSelectedMedia(agent);
     } else if (args.selectedFilename) {
       mediaLibrary.selectMedia(args.selectedFilename, agent, args.selectedKind);
+    } else if (args.selectedKind !== undefined) {
+      mediaLibrary.setSelectedKind(args.selectedKind, agent);
     }
 
     const state = agent.getState(MediaLibraryState);

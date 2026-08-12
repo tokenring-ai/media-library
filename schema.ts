@@ -20,27 +20,16 @@ export const MediaLibraryEntrySchema = z.object({
 
 export type MediaLibraryEntry = z.output<typeof MediaLibraryEntrySchema>;
 
-export const MediaLibraryAgentConfigSchema = z
-  .object({
-    outputDirectory: z.string().exactOptional(),
-  })
-  .default({});
-
 export const MediaLibraryServiceConfigSchema = z
   .object({
-    staticPath: z
+    outputDirectory: z
       .string()
-      .default("/api/media")
-      .meta({ restartRequired: true, advanced: true, description: "URL path media files are served under" } satisfies ConfigFieldMeta),
-    agentDefaults: z
-      .object({
-        outputDirectory: z
-          .string()
-          .default("media-library")
-          .meta({ description: "Directory generated media files are written to" } satisfies ConfigFieldMeta),
-      })
-      .prefault({})
-      .meta({ label: "Agent Defaults" } satisfies ConfigFieldMeta),
+      .default("media-library")
+      .meta({ description: "Directory for media files and indexes, relative to the workspace (default: media-library)" } satisfies ConfigFieldMeta),
+    agentTypes: z
+      .array(z.string())
+      .default(["media", "image", "imageGeneration", "video", "videoGeneration", "audio", "voice"])
+      .meta({ description: "The available agent types that can be used for media library work" } satisfies ConfigFieldMeta),
   })
   .prefault({})
   .meta({ label: "Media Library", description: "Storage for agent-generated images, video, and audio" } satisfies ConfigFieldMeta);

@@ -3,7 +3,6 @@ import type { TokenRingPlugin } from "@tokenring-ai/app";
 import { ChatService } from "@tokenring-ai/chat";
 import { AgentLifecycleService } from "@tokenring-ai/lifecycle";
 import { RpcService } from "@tokenring-ai/rpc";
-import { StaticResource, WebHostService } from "@tokenring-ai/web-host";
 import { z } from "zod";
 import agentCommands from "./commands.ts";
 import config from "./config/index.ts";
@@ -25,22 +24,13 @@ export default {
   description: packageJSON.description,
   config,
   install(app) {
-    const mediaLibrary = app.addService(new MediaLibraryService());
+    app.addService(new MediaLibraryService(app));
 
     app.waitForService(AgentLifecycleService, lifecycleService => lifecycleService.addHooks(addSelectedMedia));
     app.waitForService(ChatService, chatService => chatService.addTools(tools));
     app.waitForService(AgentCommandService, agentCommandService => agentCommandService.addAgentCommands(agentCommands));
     app.waitForService(RpcService, rpcService => {
       rpcService.registerEndpoint(mediaLibraryRPC);
-    });
-    app.waitForService(WebHostService, webHostService => {
-      webHostService.registerResource(
-        "Media Library Files",
-        new StaticResource({
-          root: mediaLibrary.getDefaultOutputDirectory(),
-          prefix: mediaLibrary.getStaticPath(),
-        }),
-      );
     });
   },
   reconfigure(app, config) {
