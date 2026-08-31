@@ -24,7 +24,7 @@ export default {
   description: packageJSON.description,
   config,
   install(app) {
-    app.addService(new MediaLibraryService(app));
+    app.addService(MediaLibraryService, new MediaLibraryService(app));
 
     app.waitForService(AgentLifecycleService, lifecycleService => lifecycleService.addHooks(addSelectedMedia));
     app.waitForService(ChatService, chatService => chatService.addTools(tools));
