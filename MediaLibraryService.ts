@@ -169,19 +169,19 @@ export default class MediaLibraryService implements TokenRingService {
   }
 
   /**
-   * Path to the media library relative to the working directory.
-   * Used for FileSystemService ops and `/api/fs/{provider}/...` URLs (posix is rooted at the working directory).
-   * Typically `.tokenring/media-library` when workspaceDirectory is `<working>/.tokenring`.
+   * Path to the media library relative to the WORKSPACE directory.
+   * FileSystemService and `/api/fs/{provider}/...` resolve relative paths
+   * against the workspace directory. Typically `media-library`.
    */
   getServeDirectory(): string {
     const absolute = this.getOutputDirectory();
-    const relative = path.relative(this.app.appConfig.workingDirectory, absolute);
+    const relative = path.relative(this.app.appConfig.workspaceDirectory, absolute);
     if (!relative || relative === ".") {
-      throw new Error(`Media library directory resolves to the working directory root; set mediaLibrary.outputDirectory to a subdirectory`);
+      throw new Error(`Media library directory resolves to the workspace directory root; set mediaLibrary.outputDirectory to a subdirectory`);
     }
     if (relative.startsWith("..") || path.isAbsolute(relative)) {
       throw new Error(
-        `Media library directory "${absolute}" is outside the working directory "${this.app.appConfig.workingDirectory}" and cannot be served via /api/fs`,
+        `Media library directory "${absolute}" is outside the workspace directory "${this.app.appConfig.workspaceDirectory}" and cannot be served via /api/fs`,
       );
     }
     // Normalize to posix separators for FileSystemService + HTTP URLs.
@@ -228,7 +228,7 @@ export default class MediaLibraryService implements TokenRingService {
 
   async writeMedia(options: WriteMediaOptions, agent: Agent): Promise<MediaLibraryEntry & { filePath: string; buffer: Buffer }> {
     const fileSystem = agent.requireService(FileSystemService);
-    // FileSystemService + /api/fs are rooted at the working directory; absolute path is for exiftool/tools.
+    // FileSystemService + /api/fs resolve relative paths against the workspace directory; absolute path is for exiftool/tools.
     const serveDir = this.getServeDirectory();
     const absoluteDir = this.getOutputDirectory();
     const extension = options.extension ?? extensionFromMimeType(options.mimeType);
@@ -357,15 +357,19 @@ export default class MediaLibraryService implements TokenRingService {
     const existingEntries = await this.getEntriesFromDirectory(serveDir, {}, agent);
     const preserved = existingEntries.filter(entry => !kinds.includes(entry.kind));
 
-    // Glob via FileSystemService using the working-directory-relative serve path.
-    const files = extensions.length > 0 ? await fileSystem.glob(`${serveDir}/*.{${extensions.join(",")}}`, { ignoreFilter: () => false }, agent) : [];
+    // Glob via FileSystemService with the absolute output directory (hidden dirs
+    // included — the workspace lives under dot-directories).
+    const files =
+      extensions.length > 0
+        ? await fileSystem.glob(`${absoluteDir}/*.{${extensions.join(",")}}`, { includeHidden: true, gitignore: false, aiignore: false }, agent)
+        : [];
     const scanned: MediaLibraryEntry[] = [];
 
     for (const file of files) {
       const filename = path.basename(file);
       const detectedKind = kindFromFile(file);
-      // Glob returns working-directory-relative paths; exiftool needs a real filesystem path.
-      const absoluteFile = path.isAbsolute(file) ? file : this.app.getWorkingDirectoryResolvedPath(file);
+      // Glob returns absolute paths; exiftool gets them directly.
+      const absoluteFile = file;
 
       try {
         const metadata = await exiftool.read(absoluteFile);

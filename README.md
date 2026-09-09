@@ -172,7 +172,7 @@ const mediaLibrary = agent.requireService(MediaLibraryService);
 | `attach(agent: Agent, creationContext: AgentCreationContext): void` | Initialize `MediaLibraryState` on an agent and push the media directory to the creation context items |
 | `getOutputDirectoryName(): string` | Return the configured directory name relative to the workspace (e.g. `media-library`) |
 | `getOutputDirectory(): string` | Return the absolute path to the media library directory under the workspace |
-| `getServeDirectory(): string` | Return the path to the media library relative to the working directory, for FileSystemService ops and `/api/fs/{provider}/...` URLs |
+| `getServeDirectory(): string` | Return the path to the media library relative to the workspace directory, for FileSystemService ops and `/api/fs/{provider}/...` URLs |
 | `getDefaultOutputDirectory(): string` | Deprecated — alias for `getOutputDirectory()` |
 | `getSelectedMedia(agent: Agent): { filename: string; kind?: MediaKind } \| null` | Return the currently selected media for an agent, or `null` |
 | `selectMedia(filename: string, agent: Agent, kind?: MediaKind): void` | Set the selected media filename and optional kind for an agent |
