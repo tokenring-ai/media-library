@@ -1,25 +1,34 @@
 import type { ImageIndexEntry } from "@tokenring-ai/media-library/rpc/schema";
-import { Download, ImageIcon, Loader2, Sparkles, ZoomIn } from "lucide-react";
-import { useEffect, useState } from "react";
 import Lightbox from "@tokenring-ai/one-frontend/components/ui/Lightbox.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewerHeader from "@tokenring-ai/one-frontend/components/ui/ViewerHeader.tsx";
 import { useLightbox } from "@tokenring-ai/one-frontend/hooks/useLightbox.ts";
+import { Download, ImageIcon, Loader2, Sparkles, WandSparkles, ZoomIn } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { EnsureAgent } from "../../types.ts";
 import { useMediaFileUrl, useMediaServeDirectory } from "../../useMediaPaths.ts";
 import { aspectLabel, downloadMedia } from "../../utils.ts";
 import ActionButton from "./ActionButton.tsx";
+import ImageVariationDialog from "./ImageVariationDialog.tsx";
+import PromptBlock from "./PromptBlock.tsx";
 
 export default function ImageViewer({
   image,
   workingOn,
   onWorkOnImage,
   onClose,
+  ensureAgent,
+  onVariationCreated,
 }: {
   image: ImageIndexEntry;
   workingOn?: boolean | undefined;
   onWorkOnImage: () => Promise<void>;
   onClose: () => void;
+  /** With both of these, the viewer offers "Edit / variation"; the new file is handed to `onVariationCreated`. */
+  ensureAgent?: EnsureAgent | undefined;
+  onVariationCreated?: ((filename: string) => void) | undefined;
 }) {
+  const [editing, setEditing] = useState(false);
   const { isOpen: lightbox, open: openLightbox, close: closeLightbox } = useLightbox({ itemKey: image.filename });
   const [loadError, setLoadError] = useState(false);
   const busy = workingOn ?? false;
@@ -64,6 +73,11 @@ export default function ImageViewer({
             >
               {busy ? "Opening..." : "Work on this image"}
             </ActionButton>
+            {ensureAgent && onVariationCreated && (
+              <ActionButton onClick={() => setEditing(true)} icon={<WandSparkles className="w-3.5 h-3.5" />}>
+                Edit / variation
+              </ActionButton>
+            )}
             <ActionButton onClick={openLightbox} disabled={loadError} icon={<ZoomIn className="w-3.5 h-3.5" />}>
               Full size
             </ActionButton>
@@ -92,6 +106,22 @@ export default function ImageViewer({
           />
         )}
       </div>
+      {editing && ensureAgent && onVariationCreated && (
+        <ImageVariationDialog
+          image={image}
+          ensureAgent={ensureAgent}
+          onClose={() => setEditing(false)}
+          onCreated={filename => {
+            setEditing(false);
+            onVariationCreated(filename);
+          }}
+        />
+      )}
+      {image.prompt && (
+        <div className="shrink-0 border-t border-primary bg-primary px-4 py-3">
+          <PromptBlock prompt={image.prompt} />
+        </div>
+      )}
     </div>
   );
 }

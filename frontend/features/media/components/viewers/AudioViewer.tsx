@@ -1,23 +1,24 @@
 import type { AudioIndexEntry } from "@tokenring-ai/media-library/rpc/schema";
-import formatError from "@tokenring-ai/utility/error/formatError";
-import { Download, Loader2, Music, Pause, Play, Sparkles, Type, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewerHeader from "@tokenring-ai/one-frontend/components/ui/ViewerHeader.tsx";
 import { audioRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
+import formatError from "@tokenring-ai/utility/error/formatError";
+import { Download, Loader2, Music, Pause, Play, Sparkles, Type, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { EnsureAgent } from "../../types.ts";
 import { useMediaFileUrl, useMediaServeDirectory } from "../../useMediaPaths.ts";
 import { downloadMedia, formatDuration } from "../../utils.ts";
 import ActionButton from "./ActionButton.tsx";
 
 export default function AudioViewer({
   audio,
-  agentId,
+  ensureAgent,
   workingOn,
   onWorkOnAudio,
   onClose,
 }: {
   audio: AudioIndexEntry;
-  agentId: string | null;
+  ensureAgent: EnsureAgent;
   workingOn?: boolean | undefined;
   onWorkOnAudio: () => Promise<void>;
   onClose: () => void;
@@ -48,12 +49,11 @@ export default function AudioViewer({
   if (audio.channels) subtitleParts.push(audio.channels === 1 ? "mono" : audio.channels === 2 ? "stereo" : `${audio.channels}ch`);
 
   const handleTranscribe = async () => {
-    if (!agentId) {
-      toastManager.error("Agent not ready", { duration: 3000 });
-      return;
-    }
     setTranscribing(true);
     try {
+      // Transcription needs an agent; attach to the media agent, starting one if needed.
+      const agentId = await ensureAgent();
+      if (!agentId) return;
       const result = await audioRPCClient.transcribeAudio({ agentId, filename: audio.filename });
       if (result.status === "success") {
         setTranscript(result.text);
@@ -105,7 +105,7 @@ export default function AudioViewer({
             </ActionButton>
             <ActionButton
               onClick={() => void handleTranscribe()}
-              disabled={transcribing || !agentId}
+              disabled={transcribing}
               icon={transcribing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Type className="w-3.5 h-3.5" />}
             >
               {transcribing ? "Transcribing..." : "Transcribe"}
@@ -125,7 +125,7 @@ export default function AudioViewer({
           <button
             type="button"
             onClick={togglePlay}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-accent hover:bg-accent-hover text-white text-sm font-medium rounded-full transition-colors cursor-pointer shadow-button-primary"
+            className="flex items-center justify-center gap-2 px-6 py-2.5 btn-accent text-sm font-medium rounded-full transition-colors cursor-pointer shadow-button-primary"
           >
             {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             {playing ? "Pause" : "Play"}

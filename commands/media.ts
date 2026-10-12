@@ -5,8 +5,8 @@ const inputSchema = {} as const satisfies AgentCommandInputSchema;
 
 async function execute({ agent }: AgentCommandInputType<typeof inputSchema>): Promise<string> {
   const mediaLibrary = agent.requireService(MediaLibraryService);
-  const count = await mediaLibrary.reindex(agent);
-  return `Media library re-indexed successfully. ${count} files indexed.`;
+  const { total, added, removed, kept } = await mediaLibrary.reindex(agent);
+  return `Media library re-indexed successfully: ${added} added, ${removed} removed, ${kept} kept (${total} files indexed).`;
 }
 
 export default {
@@ -14,7 +14,9 @@ export default {
   description: "Reindex the media library directory",
   inputSchema,
   execute,
-  help: `Regenerate the media_index.json file by scanning images, videos, and audio files in the media library directory.
+  help: `Reconcile media_index.json with the images, videos, and audio files in the media library directory.
+
+Existing index entries are kept as they are (generated media's prompt, keywords and creation time live only in the index), files that are not indexed yet are added from their EXIF/filesystem metadata, and entries whose file was deleted are dropped.
 
 ## Example
 

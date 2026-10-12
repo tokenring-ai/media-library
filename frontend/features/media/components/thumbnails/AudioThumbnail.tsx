@@ -7,6 +7,9 @@ export default function AudioThumbnail({ audio, selected, onClick }: { audio: Au
     <button
       type="button"
       onClick={onClick}
+      aria-label={`Open ${audio.filename}`}
+      aria-current={selected}
+      title={audio.filename}
       className={`relative rounded-lg overflow-hidden border-2 transition-all focus:outline-none cursor-pointer group aspect-square ${
         selected ? "border-accent shadow-accent bg-accent-subtle" : "border-transparent hover:border-white/20 bg-tertiary"
       }`}

@@ -1,15 +1,17 @@
+import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
+import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
+import { audioRPCClient, useSpeechModels } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { Mic } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useMemo, useState } from "react";
-import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
-import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
-import { audioRPCClient, useSpeechModels } from "@tokenring-ai/one-frontend/rpc.ts";
+import type { EnsureAgent } from "../../types.ts";
 import { keywordsFromPrompt } from "../../utils.ts";
 import GeneratePanelShell from "./GeneratePanelShell.tsx";
 import ModelSelectField from "./ModelSelectField.tsx";
+import NoModelsNotice from "./NoModelsNotice.tsx";
 
-export default function SpeechGeneratePanel({ agentId, onGenerated }: { agentId: string | null; onGenerated: (filename?: string) => void }) {
+export default function SpeechGeneratePanel({ ensureAgent, onGenerated }: { ensureAgent: EnsureAgent; onGenerated: (filename?: string) => void }) {
   const [text, setText] = useState("");
   const [voice, setVoice] = useState("");
   const [speed, setSpeed] = useState<number>(1);
@@ -31,12 +33,11 @@ export default function SpeechGeneratePanel({ agentId, onGenerated }: { agentId:
       toastManager.error("Please enter some text", { duration: 3000 });
       return;
     }
-    if (!agentId) {
-      toastManager.error("Agent not ready yet", { duration: 3000 });
-      return;
-    }
     setGenerating(true);
     try {
+      // Generation needs an agent; attach to the media agent, starting one if needed.
+      const agentId = await ensureAgent();
+      if (!agentId) return;
       const result = await audioRPCClient.generateSpeech({
         agentId,
         text: text.trim(),
@@ -127,10 +128,14 @@ export default function SpeechGeneratePanel({ agentId, onGenerated }: { agentId:
           />
         </div>
       </div>
-      <ModelSelectField label="Model" value={selectedModel} onChange={setModel} options={availableModels} />
+      {modelsData != null && availableModels.length === 0 ? (
+        <NoModelsNotice capability="speech" />
+      ) : (
+        <ModelSelectField label="Model" value={selectedModel} onChange={setModel} options={availableModels} />
+      )}
       <GenerateButton
         onClick={() => void handleGenerate()}
-        disabled={generating || !agentId || !text.trim() || (modelsData != null && availableModels.length === 0)}
+        disabled={generating || !text.trim() || (modelsData != null && availableModels.length === 0)}
         loading={generating}
       >
         Generate Speech

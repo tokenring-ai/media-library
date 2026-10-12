@@ -1,18 +1,20 @@
+import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
+import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
+import { imageGenerationRPCClient, useImageGenerationModels } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { WandSparkles } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useMemo, useState } from "react";
-import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
-import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
-import { imageGenerationRPCClient, useImageGenerationModels } from "@tokenring-ai/one-frontend/rpc.ts";
+import type { EnsureAgent } from "../../types.ts";
 import { keywordsFromPrompt } from "../../utils.ts";
 import GeneratePanelShell from "./GeneratePanelShell.tsx";
 import ImageQualityField, { type ImageQuality } from "./ImageQualityField.tsx";
 import ImageShapeField, { type ImageShape } from "./ImageShapeField.tsx";
 import ModelSelectField from "./ModelSelectField.tsx";
+import NoModelsNotice from "./NoModelsNotice.tsx";
 import PromptField from "./PromptField.tsx";
 
-export default function ImageGeneratePanel({ agentId, onGenerated }: { agentId: string | null; onGenerated: (filename?: string) => void }) {
+export default function ImageGeneratePanel({ ensureAgent, onGenerated }: { ensureAgent: EnsureAgent; onGenerated: (filename?: string) => void }) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<string>("");
   const [shape, setShape] = useState<ImageShape>("square");
@@ -34,12 +36,11 @@ export default function ImageGeneratePanel({ agentId, onGenerated }: { agentId: 
       toastManager.error("Please enter a prompt", { duration: 3000 });
       return;
     }
-    if (!agentId) {
-      toastManager.error("Agent not ready yet", { duration: 3000 });
-      return;
-    }
     setGenerating(true);
     try {
+      // Generation needs an agent; attach to the media agent, starting one if needed.
+      const agentId = await ensureAgent();
+      if (!agentId) return;
       const result = await imageGenerationRPCClient.generateImage({
         agentId,
         ...(selectedModel && { model: selectedModel }),
@@ -87,10 +88,14 @@ export default function ImageGeneratePanel({ agentId, onGenerated }: { agentId: 
       <PromptField value={prompt} onChange={setPrompt} onKeyDown={handleKeyDown} placeholder="A serene mountain lake at sunset with reflections..." />
       <ImageShapeField value={shape} onChange={setShape} />
       <ImageQualityField value={quality} onChange={setQuality} />
-      <ModelSelectField label="Model" value={selectedModel} onChange={setModel} options={availableModels} />
+      {modelsData != null && availableModels.length === 0 ? (
+        <NoModelsNotice capability="image generation" />
+      ) : (
+        <ModelSelectField label="Model" value={selectedModel} onChange={setModel} options={availableModels} />
+      )}
       <GenerateButton
         onClick={() => void handleGenerate()}
-        disabled={generating || !agentId || !prompt.trim() || (modelsData != null && availableModels.length === 0)}
+        disabled={generating || !prompt.trim() || (modelsData != null && availableModels.length === 0)}
         loading={generating}
       >
         Generate Image

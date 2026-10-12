@@ -12,6 +12,9 @@ export default function VideoThumbnail({ video, selected, onClick }: { video: Vi
     <button
       type="button"
       onClick={onClick}
+      aria-label={`Open ${video.filename}`}
+      aria-current={selected}
+      title={video.filename}
       className={`relative rounded-lg overflow-hidden border-2 transition-all focus:outline-none cursor-pointer group aspect-square bg-tertiary ${
         selected ? "border-accent shadow-accent" : "border-transparent hover:border-white/20"
       }`}

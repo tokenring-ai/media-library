@@ -1,6 +1,14 @@
 import { describe, expect, it, mock } from "bun:test";
 import { aspectLabel, downloadMedia, formatDuration, keywordsFromPrompt, mediaUrl, workOnMediaMessage } from "./utils.ts";
 
+/**
+ * `document` viewed through the single non-deprecated `createElement` overload. Reaching for the
+ * property on `Document` itself also pulls in lib.dom's deprecated *deprecated-tag* overload,
+ * which these tests never use.
+ */
+type CreateElementHost = { createElement(tagName: string, options?: ElementCreationOptions): HTMLElement };
+const doc: CreateElementHost = document;
+
 describe("mediaUrl", () => {
   it("builds a filesystem HTTP URL under the default serve directory", () => {
     expect(mediaUrl("panda.png")).toBe("/api/fs/posix/.tokenring/media-library/panda.png");
@@ -18,7 +26,7 @@ describe("downloadMedia", () => {
     const originalFetch = globalThis.fetch;
     const originalCreateObjectURL = URL.createObjectURL;
     const originalRevokeObjectURL = URL.revokeObjectURL;
-    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateElement = doc.createElement.bind(doc);
 
     const fetchMock = mock((_url: string, _init?: RequestInit) =>
       Promise.resolve({
@@ -33,11 +41,11 @@ describe("downloadMedia", () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     URL.createObjectURL = createObjectURL as typeof URL.createObjectURL;
     URL.revokeObjectURL = revokeObjectURL as typeof URL.revokeObjectURL;
-    document.createElement = ((tag: string) => {
+    doc.createElement = ((tag: string) => {
       const el = originalCreateElement(tag);
       if (tag === "a") Object.defineProperty(el, "click", { value: click });
       return el;
-    }) as typeof document.createElement;
+    }) as CreateElementHost["createElement"];
 
     try {
       await downloadMedia("panda.png");
@@ -54,7 +62,7 @@ describe("downloadMedia", () => {
       globalThis.fetch = originalFetch;
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
-      document.createElement = originalCreateElement;
+      doc.createElement = originalCreateElement;
     }
   });
 
@@ -63,7 +71,7 @@ describe("downloadMedia", () => {
     const originalFetch = globalThis.fetch;
     const originalCreateObjectURL = URL.createObjectURL;
     const originalRevokeObjectURL = URL.revokeObjectURL;
-    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateElement = doc.createElement.bind(doc);
 
     const createObjectURL = mock(() => "blob:leaky");
     const revokeObjectURL = mock(() => {});
@@ -83,14 +91,14 @@ describe("downloadMedia", () => {
     ) as unknown as typeof fetch;
     URL.createObjectURL = createObjectURL as typeof URL.createObjectURL;
     URL.revokeObjectURL = revokeObjectURL as typeof URL.revokeObjectURL;
-    document.createElement = ((tag: string) => {
+    doc.createElement = ((tag: string) => {
       const el = originalCreateElement(tag);
       if (tag === "a") {
         Object.defineProperty(el, "click", { value: click });
         Object.defineProperty(el, "remove", { value: remove });
       }
       return el;
-    }) as typeof document.createElement;
+    }) as CreateElementHost["createElement"];
 
     try {
       await downloadMedia("panda.png");
@@ -102,7 +110,7 @@ describe("downloadMedia", () => {
       globalThis.fetch = originalFetch;
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
-      document.createElement = originalCreateElement;
+      doc.createElement = originalCreateElement;
     }
   });
 });

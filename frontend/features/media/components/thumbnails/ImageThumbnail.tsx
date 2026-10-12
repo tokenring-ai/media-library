@@ -1,7 +1,7 @@
 import type { ImageIndexEntry } from "@tokenring-ai/media-library/rpc/schema";
+import CenteredLoadingSpinner from "@tokenring-ai/one-frontend/components/ui/CenteredLoadingSpinner.tsx";
 import { ImageIcon } from "lucide-react";
 import { useState } from "react";
-import CenteredLoadingSpinner from "@tokenring-ai/one-frontend/components/ui/CenteredLoadingSpinner.tsx";
 import { useMediaFileUrl } from "../../useMediaPaths.ts";
 
 export default function ImageThumbnail({ image, selected, onClick }: { image: ImageIndexEntry; selected: boolean; onClick: () => void }) {
@@ -13,6 +13,9 @@ export default function ImageThumbnail({ image, selected, onClick }: { image: Im
     <button
       type="button"
       onClick={onClick}
+      aria-label={`Open ${image.filename}`}
+      aria-current={selected}
+      title={image.filename}
       className={`relative rounded-lg overflow-hidden border-2 transition-all focus:outline-none cursor-pointer group aspect-square bg-tertiary ${
         selected ? "border-accent shadow-accent" : "border-transparent hover:border-white/20"
       }`}

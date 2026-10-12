@@ -48,11 +48,18 @@ bun add @tokenring-ai/media-library
 
 | Command | Description |
 |---------|-------------|
-| `/media reindex` | Reindex the media library directory |
+| `/media reindex` | Reconcile the index with the media library directory |
 
 ### /media reindex
 
-Regenerate `media_index.json` by scanning images, videos, and audio files in the media library directory.
+Reconcile `media_index.json` with the images, videos, and audio files in the media library directory. This is a merge, not a rebuild:
+
+- entries whose file still exists are kept exactly as they are — generated media's `prompt`, `keywords` and `createdAt` live only in the index (video and audio never write them to EXIF), so a rebuild from file metadata would lose them;
+- files on disk with no entry are added from their EXIF/container metadata (falling back to the file's modification time);
+- entries whose file no longer exists are dropped;
+- duplicate index lines for one file collapse to the newest.
+
+The command reports how many entries were added, removed and kept. `/image reindex`, `/video reindex` and `/audio reindex` run the same merge restricted to one kind and leave other kinds' entries untouched.
 
 **Usage:**
 
@@ -183,7 +190,15 @@ const mediaLibrary = agent.requireService(MediaLibraryService);
 | `addToIndex(entry: MediaLibraryEntry, agent: Agent): Promise<void>` | Append an existing media entry to `media_index.json` |
 | `getEntriesFromDirectory(directory: string, options?: DirectoryQueryOptions, agent?: Agent): Promise<MediaLibraryEntry[]>` | Read indexed entries from a directory, with optional filtering by kind, search text, and limit |
 | `search(query: string, options: SearchOptions, agent: Agent): Promise<Array<MediaLibraryEntry & { score: number; path: string }>>` | Search indexed media entries with similarity scoring |
-| `reindex(agent: Agent, kinds?: MediaKind[]): Promise<number>` | Rebuild the media index by scanning files; returns the number of scanned files |
+| `reindex(agent?: Agent, kinds?: MediaKind[]): Promise<ReindexSummary>` | Merge-reindex (see `/media reindex`); returns `{ total, added, removed, kept }`. Without an agent it works directly on the workspace media directory (RPC) |
+| `getEntry(filename: string, agent?: Agent): Promise<MediaLibraryEntry \| null>` | One index entry by file name |
+| `mediaFileExists(filename: string, agent?: Agent): Promise<boolean>` | Whether a file of that name is in the library directory |
+| `deleteMedia(filename: string, agent?: Agent): Promise<{ clearedSelections: number }>` | Delete the file and its entry, clearing any agent selection of it (every agent when called without one) |
+| `renameMedia(filename: string, newFilename: string, agent?: Agent): Promise<MediaLibraryEntry>` | Rename a file keeping its kind; its entry and agent selections follow |
+| `updateKeywords(filename: string, keywords: string[], agent?: Agent): Promise<MediaLibraryEntry>` | Replace an entry's keywords (trimmed, de-duplicated case-insensitively) |
+| `importMedia({ filename, buffer, overwrite? }, agent?: Agent): Promise<MediaLibraryEntry>` | Write an uploaded file and index it from its own metadata |
+
+Index rewrites (reindex, delete, rename, keyword edits, imports, appends) are serialized within the process. File names passed to these methods must be bare names with a media extension (`validateMediaFilename`); path separators, leading dots and `media_index.json` are rejected.
 
 #### WriteMediaOptions
 
@@ -336,7 +351,7 @@ The hook only attaches once per selection — `lastAttachedFilename` is updated 
 
 ## RPC
 
-The plugin registers an RPC endpoint at `/rpc/media-library` with five methods.
+The plugin registers an RPC endpoint at `/rpc/media-library` with eleven methods.
 
 | Method | Type | Description |
 |--------|------|-------------|
@@ -345,6 +360,16 @@ The plugin registers an RPC endpoint at `/rpc/media-library` with five methods.
 | `streamMedia` | stream | Polling stream of media index entries (10 second interval) with optional kind filter, text search, and limit |
 | `getMediaLibraryState` | query | Return the selected media state for a given agent |
 | `updateMediaLibraryState` | mutation | Update the selected media state for a given agent |
+| `reindexMedia` | mutation | Merge-reindex the library directory (keeps existing metadata); returns `{ total, added, removed, kept }` |
+| `mediaFileExists` | query | `{ filename }` → `{ exists }`, for upload overwrite checks |
+| `deleteMedia` | mutation | `{ filename }` → `{ success, clearedSelections }`; deletes the file and entry and clears agent selections |
+| `renameMedia` | mutation | `{ filename, newFilename }` → `{ entry }`; same media kind, target must not exist |
+| `updateMediaKeywords` | mutation | `{ filename, keywords }` → `{ entry }` |
+| `importMedia` | mutation | `{ filename, contentBase64, overwrite? }` → `{ entry }`; refuses an existing name unless `overwrite` |
+
+## Media dashboard
+
+The gallery's Refresh calls `reindexMedia`, so files copied into the folder by hand appear without losing generated metadata. The gallery also uploads files into the library (10 MB per file, overwrite prompt for existing names) and filters by tag. Each media panel has a bar to add/remove tags, rename and delete (with confirmation; the panel follows a rename and closes on delete). Images offer **Edit / variation**: *Variation* generates a new image from an edited copy of the source prompt (keeping its tags and closest shape) and *Adjust* saves a scaled, re-encoded or brightened copy via the image plugin's `adjustImage` RPC; either result opens as a new library item.
 
 ### getMedia / streamMedia Input
 

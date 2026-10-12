@@ -1,18 +1,20 @@
+import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
+import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
+import { useVideoGenerationModels, videoGenerationRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { Video as VideoIcon } from "lucide-react";
 import type { KeyboardEvent } from "react";
 import { useMemo, useState } from "react";
-import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
-import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
-import { useVideoGenerationModels, videoGenerationRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
+import type { EnsureAgent } from "../../types.ts";
 import { keywordsFromPrompt } from "../../utils.ts";
 import GeneratePanelShell from "./GeneratePanelShell.tsx";
 import ImageShapeField, { type ImageShape } from "./ImageShapeField.tsx";
 import ModelSelectField from "./ModelSelectField.tsx";
+import NoModelsNotice from "./NoModelsNotice.tsx";
 import PromptField from "./PromptField.tsx";
 import VideoQualityField, { type VideoQuality } from "./VideoQualityField.tsx";
 
-export default function VideoGeneratePanel({ agentId, onGenerated }: { agentId: string | null; onGenerated: (filename?: string) => void }) {
+export default function VideoGeneratePanel({ ensureAgent, onGenerated }: { ensureAgent: EnsureAgent; onGenerated: (filename?: string) => void }) {
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<string>("");
   const [shape, setShape] = useState<ImageShape>("landscape");
@@ -35,12 +37,11 @@ export default function VideoGeneratePanel({ agentId, onGenerated }: { agentId: 
       toastManager.error("Please enter a prompt", { duration: 3000 });
       return;
     }
-    if (!agentId) {
-      toastManager.error("Agent not ready yet", { duration: 3000 });
-      return;
-    }
     setGenerating(true);
     try {
+      // Generation needs an agent; attach to the media agent, starting one if needed.
+      const agentId = await ensureAgent();
+      if (!agentId) return;
       const result = await videoGenerationRPCClient.generateVideo({
         agentId,
         ...(selectedModel && { model: selectedModel }),
@@ -109,10 +110,14 @@ export default function VideoGeneratePanel({ agentId, onGenerated }: { agentId: 
           className="w-full bg-input border border-primary rounded-lg py-2 px-3 text-sm text-primary focus-accent transition-all"
         />
       </div>
-      <ModelSelectField label="Model" value={selectedModel} onChange={setModel} options={availableModels} />
+      {modelsData != null && availableModels.length === 0 ? (
+        <NoModelsNotice capability="video generation" />
+      ) : (
+        <ModelSelectField label="Model" value={selectedModel} onChange={setModel} options={availableModels} />
+      )}
       <GenerateButton
         onClick={() => void handleGenerate()}
-        disabled={generating || !agentId || !prompt.trim() || (modelsData != null && availableModels.length === 0)}
+        disabled={generating || !prompt.trim() || (modelsData != null && availableModels.length === 0)}
         loading={generating}
       >
         Generate Video

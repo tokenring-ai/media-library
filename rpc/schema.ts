@@ -91,6 +91,59 @@ export default {
       input: MediaListQuerySchema,
       result: MediaListResultSchema,
     },
+    /**
+     * Reconciles the index with the library directory: keeps every entry whose
+     * file still exists (with its prompt, keywords and dates), adds files that
+     * are not indexed yet, and drops entries whose file is gone.
+     */
+    reindexMedia: {
+      type: "mutation",
+      input: z.object({}),
+      result: z.object({
+        total: z.number(),
+        added: z.number(),
+        removed: z.number(),
+        kept: z.number(),
+      }),
+    },
+    /** Whether a file of this name is already in the library directory (upload overwrite check). */
+    mediaFileExists: {
+      type: "query",
+      input: z.object({ filename: z.string() }),
+      result: z.object({ exists: z.boolean() }),
+    },
+    /** Deletes a library file and its index entry, and clears any agent selection of it. */
+    deleteMedia: {
+      type: "mutation",
+      input: z.object({ filename: z.string() }),
+      result: z.object({
+        success: z.boolean(),
+        /** Agents whose media selection pointed at the file and was cleared. */
+        clearedSelections: z.number(),
+      }),
+    },
+    /** Renames a library file (same media kind), carrying its metadata and agent selections. */
+    renameMedia: {
+      type: "mutation",
+      input: z.object({ filename: z.string(), newFilename: z.string() }),
+      result: z.object({ entry: MediaIndexEntrySchema }),
+    },
+    /** Replaces an entry's keywords (tags). */
+    updateMediaKeywords: {
+      type: "mutation",
+      input: z.object({ filename: z.string(), keywords: z.array(z.string()) }),
+      result: z.object({ entry: MediaIndexEntrySchema }),
+    },
+    /** Imports an uploaded file (base64) into the library and indexes it. */
+    importMedia: {
+      type: "mutation",
+      input: z.object({
+        filename: z.string(),
+        contentBase64: z.string(),
+        overwrite: z.boolean().default(false),
+      }),
+      result: z.object({ entry: MediaIndexEntrySchema }),
+    },
     getMediaLibraryState: {
       type: "query",
       input: z.object({

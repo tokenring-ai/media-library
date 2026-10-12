@@ -1,10 +1,10 @@
 import type { VideoIndexEntry } from "@tokenring-ai/media-library/rpc/schema";
-import { Download, Loader2, Sparkles, Video as VideoIcon, ZoomIn } from "lucide-react";
-import { useEffect, useState } from "react";
 import Lightbox from "@tokenring-ai/one-frontend/components/ui/Lightbox.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import ViewerHeader from "@tokenring-ai/one-frontend/components/ui/ViewerHeader.tsx";
 import { useLightbox } from "@tokenring-ai/one-frontend/hooks/useLightbox.ts";
+import { Download, Loader2, Sparkles, Video as VideoIcon, ZoomIn } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useMediaFileUrl, useMediaServeDirectory } from "../../useMediaPaths.ts";
 import { downloadMedia, formatDuration } from "../../utils.ts";
 import ActionButton from "./ActionButton.tsx";

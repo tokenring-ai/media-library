@@ -77,6 +77,35 @@ const streamMedia = createPollingQueryStream({
 });
 
 export default createRPCEndpoint(MediaLibraryRpcSchema, {
+  async reindexMedia(_args, app: TokenRingApp) {
+    return app.requireService(MediaLibraryService).reindex();
+  },
+
+  async mediaFileExists(args, app: TokenRingApp) {
+    return { exists: await app.requireService(MediaLibraryService).mediaFileExists(args.filename) };
+  },
+
+  async deleteMedia(args, app: TokenRingApp) {
+    const { clearedSelections } = await app.requireService(MediaLibraryService).deleteMedia(args.filename);
+    return { success: true, clearedSelections };
+  },
+
+  async renameMedia(args, app: TokenRingApp) {
+    const entry = await app.requireService(MediaLibraryService).renameMedia(args.filename, args.newFilename);
+    return { entry: projectMediaEntry(entry) };
+  },
+
+  async updateMediaKeywords(args, app: TokenRingApp) {
+    const entry = await app.requireService(MediaLibraryService).updateKeywords(args.filename, args.keywords);
+    return { entry: projectMediaEntry(entry) };
+  },
+
+  async importMedia(args, app: TokenRingApp) {
+    const buffer = Buffer.from(args.contentBase64, "base64");
+    const entry = await app.requireService(MediaLibraryService).importMedia({ filename: args.filename, buffer, overwrite: args.overwrite });
+    return { entry: projectMediaEntry(entry) };
+  },
+
   getMediaLibraryConfiguration(_args, app: TokenRingApp) {
     const mediaLibrary = app.requireService(MediaLibraryService);
 
