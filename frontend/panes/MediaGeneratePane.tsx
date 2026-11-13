@@ -1,27 +1,17 @@
-import type { ViewProps } from "@tokenring-ai/one-frontend/dock/types.ts";
-import { useEffect } from "react";
-import type { MediaGenerateParams } from "../app.tsx";
+import type { ViewProps } from "@tokenring-ai/one-frontend/layout/define.ts";
 import ImageGeneratePanel from "../features/media/components/generate/ImageGeneratePanel.tsx";
 import SpeechGeneratePanel from "../features/media/components/generate/SpeechGeneratePanel.tsx";
 import VideoGeneratePanel from "../features/media/components/generate/VideoGeneratePanel.tsx";
-import { useMediaAgentSession, useMediaNavigation } from "../lib/mediaShared.tsx";
+import type { MediaKind } from "../features/media/types.ts";
+import { useMediaAgentSession } from "../lib/mediaAgent.tsx";
 import { markGenerated, refreshMediaLibrary, setMediaBrowserState } from "../lib/mediaStore.ts";
+import { useMediaLayoutNavigation } from "../lib/useMediaLayoutNavigation.ts";
 
-const TITLES: Record<MediaGenerateParams["kind"], string> = {
-  image: "Generate image",
-  video: "Generate video",
-  audio: "Generate speech",
-};
-
-/** The generation form for one media kind; the new file opens in its own panel. */
-export default function MediaGenerateView({ params, panel }: ViewProps<MediaGenerateParams>) {
-  const { kind } = params;
+/** The generation form for one media kind; the new file opens in its own tab. */
+export default function MediaGeneratePane({ params }: ViewProps) {
+  const kind: MediaKind = params.kind === "video" || params.kind === "audio" ? params.kind : "image";
   const { ensureAgent } = useMediaAgentSession();
-  const { openItem } = useMediaNavigation();
-
-  useEffect(() => {
-    panel.setTitle(TITLES[kind]);
-  }, [kind, panel]);
+  const { openItem } = useMediaLayoutNavigation();
 
   const handleGenerated = (filename?: string) => {
     // Clear the search so the new file is not filtered out of the gallery.
@@ -39,9 +29,5 @@ export default function MediaGenerateView({ params, panel }: ViewProps<MediaGene
       return <VideoGeneratePanel ensureAgent={ensureAgent} onGenerated={handleGenerated} />;
     case "audio":
       return <SpeechGeneratePanel ensureAgent={ensureAgent} onGenerated={handleGenerated} />;
-    default: {
-      const exhaustive: never = kind;
-      return exhaustive;
-    }
   }
 }

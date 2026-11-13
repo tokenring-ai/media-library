@@ -1,60 +1,38 @@
+import { usePanelTitle } from "@tokenring-ai/one-frontend/apps/panelHooks.ts";
 import CenteredLoadingSpinner from "@tokenring-ai/one-frontend/components/ui/CenteredLoadingSpinner.tsx";
 import EmptyState from "@tokenring-ai/one-frontend/components/ui/EmptyState.tsx";
 import ErrorState from "@tokenring-ai/one-frontend/components/ui/ErrorState.tsx";
-import type { ViewPanelHandle, ViewProps } from "@tokenring-ai/one-frontend/dock/types.ts";
 import { useBusyAction } from "@tokenring-ai/one-frontend/hooks/useBusyAction.ts";
-import { ImageIcon, WandSparkles, X } from "lucide-react";
+import type { ViewProps } from "@tokenring-ai/one-frontend/layout/define.ts";
+import { useLayout, usePaneLink, usePanel } from "@tokenring-ai/one-frontend/layout/hooks.ts";
+import { ImageIcon, X } from "lucide-react";
 import { useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import type { MediaItemParams } from "../app.tsx";
 import MediaItemDetails from "../features/media/components/MediaItemDetails.tsx";
 import AudioViewer from "../features/media/components/viewers/AudioViewer.tsx";
 import ImageViewer from "../features/media/components/viewers/ImageViewer.tsx";
 import VideoViewer from "../features/media/components/viewers/VideoViewer.tsx";
 import type { MediaEntry } from "../features/media/types.ts";
 import { useMediaServeDirectory } from "../features/media/useMediaPaths.ts";
+import { MEDIA_ITEM_VIEW_ID } from "../ids.ts";
 import { useMediaItemActions } from "../lib/mediaActions.tsx";
-import { useMediaAgentSession, useMediaNavigation, useSyncMediaSelection, workOnMedia } from "../lib/mediaShared.tsx";
-import { markGenerated, setMediaBrowserState, useMediaBrowserStore, useMediaEntry, useRecentlyGenerated } from "../lib/mediaStore.ts";
-import { mediaItemPath } from "../lib/paths.ts";
-
-const GENERATE_LABELS: Record<MediaEntry["kind"], string> = { image: "image", video: "video", audio: "speech" };
-
-/** A panel with no entry yet: the main area's placeholder, filled by the next thumbnail clicked. */
-function MediaPlaceholder({ panel }: { panel: ViewPanelHandle<MediaItemParams> }) {
-  const { kind } = useMediaBrowserStore();
-  const { openGenerate } = useMediaNavigation();
-
-  useEffect(() => {
-    panel.setTitle("Select media");
-  }, [panel]);
-
-  return (
-    <EmptyState
-      variant="page"
-      className="h-full bg-primary"
-      icon={ImageIcon}
-      iconBadgeClassName="bg-linear-to-br from-pink-500 to-rose-600"
-      title="Select a media item"
-      hint="Pick an image, video or clip from the gallery to preview it here, or generate a new one."
-      ctaLabel={`Generate ${GENERATE_LABELS[kind]}`}
-      ctaIcon={WandSparkles}
-      onCta={() => openGenerate(kind)}
-    />
-  );
-}
+import { useMediaAgentSession, useSyncMediaSelection, workOnMedia } from "../lib/mediaAgent.tsx";
+import { markGenerated, setMediaBrowserState, useMediaEntry, useRecentlyGenerated } from "../lib/mediaStore.ts";
+import { useMediaLayoutNavigation } from "../lib/useMediaLayoutNavigation.ts";
 
 /** The viewer plus the tags / rename / delete bar for one entry. */
-function MediaEntryPanel({ entry, panel, viewer }: { entry: MediaEntry; panel: ViewPanelHandle<MediaItemParams>; viewer: React.ReactNode }) {
-  const navigate = useNavigate();
+function MediaEntryPanel({ entry, viewer }: { entry: MediaEntry; viewer: React.ReactNode }) {
+  const panel = usePanel();
+  const open = usePaneLink();
+  const layout = useLayout();
+  const filename = entry.filename;
   const onDeleted = useCallback(() => panel.close(), [panel]);
   const onRenamed = useCallback(
     (next: string) => {
-      // The panel follows the file; the URL follows the active panel.
-      panel.updateParams({ filename: next });
-      if (panel.isActive) void navigate(mediaItemPath(next), { replace: true });
+      // A panel's params never change: the renamed file opens as a new tab and the old one closes.
+      open(MEDIA_ITEM_VIEW_ID, { filename: next }, { focus: panel.isActive });
+      layout.close(MEDIA_ITEM_VIEW_ID, { filename });
     },
-    [navigate, panel],
+    [open, layout, panel.isActive, filename],
   );
   const actions = useMediaItemActions(entry, { onDeleted, onRenamed });
   return (
@@ -65,23 +43,22 @@ function MediaEntryPanel({ entry, panel, viewer }: { entry: MediaEntry; panel: V
   );
 }
 
-function MediaItem({ filename, panel }: { filename: string; panel: ViewPanelHandle<MediaItemParams> }) {
+function MediaItem({ filename }: { filename: string }) {
+  const panel = usePanel();
   // A file generated moments ago may not be in the library snapshot yet; the
   // hook re-renders when that grace period ends.
   const recentlyGenerated = useRecentlyGenerated(filename, true);
   const lookup = useMediaEntry(filename, { waitForStream: recentlyGenerated });
   const entry = lookup.entry;
   const { agentId, ensureAgent } = useMediaAgentSession();
-  const { openAgentChat, openItem } = useMediaNavigation();
+  const { openAgentChat, openItem } = useMediaLayoutNavigation();
   const serveDirectory = useMediaServeDirectory();
   const { busy: workingOn, execute: executeWorkOn } = useBusyAction();
 
-  useEffect(() => {
-    panel.setTitle(filename);
-  }, [filename, panel]);
+  usePanelTitle(filename);
 
-  // Item panels render "always", so every open one is mounted: only the active
-  // panel drives the shared state, and becoming active re-syncs it.
+  // Item panels stay mounted while hidden, so every open one is mounted: only the
+  // active panel drives the shared state, and becoming active re-syncs it.
   const isActive = panel.isActive;
 
   // The gallery follows the panel, so the entry it shows is in the listed kind.
@@ -151,11 +128,10 @@ function MediaItem({ filename, panel }: { filename: string; panel: ViewPanelHand
       return exhaustive;
     }
   }
-  return <MediaEntryPanel entry={entry} panel={panel} viewer={viewer} />;
+  return <MediaEntryPanel entry={entry} viewer={viewer} />;
 }
 
-/** One media file per panel; without a `filename` it is the gallery's placeholder. */
-export default function MediaItemView({ params, panel }: ViewProps<MediaItemParams>) {
-  if (!params.filename) return <MediaPlaceholder panel={panel} />;
-  return <MediaItem key={params.filename} filename={params.filename} panel={panel} />;
+/** One media file per tab (`/media/<filename>`). */
+export default function MediaItemPane({ params }: ViewProps) {
+  return <MediaItem key={params.filename ?? ""} filename={params.filename ?? ""} />;
 }

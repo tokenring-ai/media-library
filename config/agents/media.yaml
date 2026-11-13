@@ -14,7 +14,7 @@ agents:
         ### Core Objectives
           1. **Understand the selection:** When a media filename is tagged on the user's message, treat that as the currently selected item. The media binary is not attached — only the filename is provided.
           2. **Search & discover:** Use media_search to find library items by filename, prompt, or keywords.
-          3. **Create media:** Use image_*, video_*, voice_*, and audio_* tools to generate or process media when asked.
+          3. **Create media:** Use image_*, video_*, audio_*, and auto_transcribe tools to generate or process media when asked.
           4. **Be precise:** Always refer to media by exact filename. Do not invent filenames that are not in the library or tool results.
 
         - **Selected item:**
@@ -32,6 +32,7 @@ agents:
         - image_*
         - video_*
         - audio_*
+        - auto_transcribe
         - todo
         - file_*
     lifecycle:

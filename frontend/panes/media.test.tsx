@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ViewDefinition, ViewParams } from "@tokenring-ai/one-frontend/dock/types.ts";
-import { createFakeDashboardApi, createFakePanelHandle, type FakeDashboardApi, renderView } from "@tokenring-ai/one-frontend/test/dock.tsx";
+import { defineView } from "@tokenring-ai/one-frontend/layout/define.ts";
+import type { ViewParams } from "@tokenring-ai/one-frontend/layout/types.ts";
+import { MessageSquare } from "lucide-react";
 import type React from "react";
-import { Route, useLocation } from "react-router-dom";
-import type { MediaGenerateParams, MediaItemParams } from "../app.tsx";
+import { SWRConfig, mutate as swrMutate } from "swr";
 
 const PassThroughFocusTrap = ({ children }: { children: React.ReactNode }) => children;
 void mock.module("focus-trap-react", () => ({ FocusTrap: PassThroughFocusTrap, default: PassThroughFocusTrap }));
@@ -113,42 +113,54 @@ void mock.module("@tokenring-ai/one-frontend/rpc.ts", () => ({
   useSpeechModels: () => ({ data: { models: { tts: { available: true } } }, isLoading: false }),
 }));
 
-const { default: contribution } = await import("../app.tsx");
+const { default: layout } = await import("../layout.ts");
+const { default: viewsModule } = await import("../views.tsx");
+const { CORE_KINDS } = await import("@tokenring-ai/one-frontend/apps/kinds.ts");
+const { createLayoutRegistry } = await import("@tokenring-ai/one-frontend/layout/registry.ts");
+const { renderLayoutApp, renderLayoutView } = await import("@tokenring-ai/one-frontend/test/layout.tsx");
 const { resetMediaBrowserStore, getMediaBrowserStateForTest, GENERATED_GRACE_MS, markGenerated } = await import("../lib/mediaStore.ts");
-const { resetSyncedMediaSelection } = await import("../lib/mediaShared.tsx");
+const { resetSyncedMediaSelection } = await import("../lib/mediaAgent.tsx");
 
-function SearchProbe() {
-  const location = useLocation();
-  return <span data-testid="landing">{`${location.pathname}${location.search}`}</span>;
+function ChatStub() {
+  return <p>chat stub</p>;
 }
 
-const ROUTES = ["/media/:filename?"];
-const getView = (id: string) => contribution.views.find(view => view.id === id);
-const viewById = (id: string) => getView(id) as ViewDefinition<any>;
-const dashboard = contribution.dashboards[0]!;
+const chatView = defineView({
+  id: "chat",
+  kind: "agent",
+  title: params => params.agentId ?? "Chat",
+  icon: MessageSquare,
+  route: "agent/:agentId",
+  instanceKey: params => params.agentId ?? "",
+  component: ChatStub,
+});
 
-function fakeApi(dashboardId = "media"): FakeDashboardApi {
-  return createFakeDashboardApi({ dashboardId, getView });
+const registry = createLayoutRegistry({ apps: layout.apps, views: [...viewsModule.views, chatView], kinds: [...CORE_KINDS, ...layout.kinds] });
+const viewById = (id: string) => viewsModule.views.find(view => view.id === id)!;
+
+SWRConfig.defaultValue.dedupingInterval = 0;
+
+let current: ReturnType<typeof renderLayoutApp> | null = null;
+
+/** The whole Media app at a URL. */
+function renderMediaApp(url = "/media") {
+  current = renderLayoutApp({ registry, url });
+  return current;
 }
 
-/** The union of params the media views accept; `kind` is optional here because only the generate view takes it. */
-type MediaViewParams = MediaItemParams & Partial<MediaGenerateParams>;
-
-function renderMediaView(viewId: string, params: MediaViewParams = {}, path = "/media", api = fakeApi()) {
-  const panel = createFakePanelHandle({
-    viewId,
-    dashboardId: api.dashboardId,
-    panelId: `${viewId}:${params.filename ?? params.kind ?? "new"}`,
-    params,
-  });
-  return renderView(viewById(viewId), params, { api, panel, path, routes: api.dashboardId === "media" ? ROUTES : ["*"] });
+/** One view alone in a throwaway app (the gallery renders in the real app). */
+function renderPane(viewId: string, params: ViewParams = {}) {
+  current = renderLayoutView(viewById(viewId), { params, views: [viewById("media-item"), viewById("media-generate"), chatView] });
+  return current;
 }
 
-const pathname = () => screen.getByTestId("pathname").textContent;
+const pathname = () => current?.location().pathname;
+const panelOpen = (key: string) => document.querySelector(`[data-panel="${key}"]`) !== null;
 
-describe("Media dashboard views", () => {
-  beforeEach(() => {
+describe("Media app", () => {
+  beforeEach(async () => {
     localStorage.clear();
+    await swrMutate(() => true, undefined, { revalidate: false });
     resetMediaBrowserStore();
     for (const fn of [
       updateMediaLibraryState,
@@ -181,28 +193,31 @@ describe("Media dashboard views", () => {
   });
 
   describe("gallery (navigator)", () => {
-    it("lists the active kind with per-kind counts and opens an entry in the main area", async () => {
+    it("lists the active kind with per-kind counts and opens an entry as a tab", async () => {
       const user = userEvent.setup();
-      const { api } = renderMediaView("media-gallery");
+      renderMediaApp();
 
       expect(await screen.findByRole("button", { name: "Open panda.png" })).toBeInTheDocument();
+      expect(panelOpen("media-start:_")).toBe(true);
       // Only the active kind is listed; the tabs still count the rest.
       expect(screen.queryByRole("button", { name: "Open drone.mp4" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Videos/ })).toHaveTextContent("1");
 
       await user.click(screen.getByRole("button", { name: "Open panda.png" }));
-      expect(api.opened).toEqual([expect.objectContaining({ viewId: "media-item", params: { filename: "panda.png" } })]);
-      expect(pathname()).toBe("/media/panda.png");
+      await waitFor(() => expect(pathname()).toBe("/media/panda.png"));
+      expect(panelOpen("media-item:panda.png")).toBe(true);
+      // The "Select media" placeholder has done its job.
+      expect(panelOpen("media-start:_")).toBe(false);
     });
 
     it("highlights the entry named by the URL", async () => {
-      renderMediaView("media-gallery", {}, "/media/panda.png");
-      expect(await screen.findByRole("button", { name: "Open panda.png" })).toHaveAttribute("aria-current", "true");
+      renderMediaApp("/media/panda.png");
+      await waitFor(() => expect(screen.getByRole("button", { name: "Open panda.png" })).toHaveAttribute("aria-current", "true"));
     });
 
     it("switches kinds and filters the listed entries by search", async () => {
       const user = userEvent.setup();
-      renderMediaView("media-gallery");
+      renderMediaApp();
 
       await user.click(await screen.findByRole("button", { name: /Audio/ }));
       expect(await screen.findByRole("button", { name: "Open hello.mp3" })).toBeInTheDocument();
@@ -211,37 +226,38 @@ describe("Media dashboard views", () => {
       expect(await screen.findByText('No audio matching "nothing"')).toBeInTheDocument();
     });
 
-    it("opens the generation panel for the listed kind", async () => {
+    it("opens the generation tab for the listed kind", async () => {
       const user = userEvent.setup();
-      const { api } = renderMediaView("media-gallery");
+      renderMediaApp();
 
-      await user.click(await screen.findByRole("button", { name: "Generate image" }));
-      expect(api.opened).toEqual([expect.objectContaining({ viewId: "media-generate", params: { kind: "image" } })]);
+      await user.click((await screen.findAllByRole("button", { name: "Generate image" }))[0]!);
+      await waitFor(() => expect(pathname()).toBe("/media/generate/image"));
+      expect(panelOpen("media-generate:image")).toBe(true);
     });
 
-    it("lists media agents on the Media dashboard and docks a chat for the attached one", async () => {
+    it("lists media agents and opens a chat for the attached one", async () => {
       state.agents = [mediaAgent];
-      const { api } = renderMediaView("media-gallery");
+      renderMediaApp();
 
       expect(await screen.findByText("Media Agent")).toBeInTheDocument();
-      await waitFor(() => expect(api.opened.some(open => open.viewId === "chat" && open.params.agentId === "agent-1")).toBe(true));
+      await waitFor(() => expect(panelOpen("chat:agent-1")).toBe(true));
     });
 
     it("says when the library holds more files than the gallery shows", async () => {
       state.count = 1234;
-      renderMediaView("media-gallery");
+      renderMediaApp();
       expect(await screen.findByTestId("media-window-note")).toHaveTextContent("Showing the newest 3 of 1,234 files");
     });
 
     it("has no window note when every file is shown", async () => {
-      renderMediaView("media-gallery");
+      renderMediaApp();
       await screen.findByRole("button", { name: "Open panda.png" });
       expect(screen.queryByTestId("media-window-note")).not.toBeInTheDocument();
     });
 
     it("Refresh rescans the media folder before reloading the gallery", async () => {
       const user = userEvent.setup();
-      renderMediaView("media-gallery");
+      renderMediaApp();
 
       await user.click((await screen.findAllByRole("button", { name: "Refresh gallery" }))[0]!);
       await waitFor(() => expect(reindexMedia).toHaveBeenCalledWith({}));
@@ -252,7 +268,7 @@ describe("Media dashboard views", () => {
       const user = userEvent.setup();
       const otter = { ...panda, filename: "otter.png", keywords: ["otter"] };
       state.entries = [panda, otter, drone, greeting];
-      renderMediaView("media-gallery");
+      renderMediaApp();
 
       expect(await screen.findByRole("button", { name: "Open otter.png" })).toBeInTheDocument();
       await user.selectOptions(screen.getByLabelText("Filter by tag"), "otter");
@@ -265,53 +281,62 @@ describe("Media dashboard views", () => {
 
     it("uploads files into the library and opens a single upload", async () => {
       const user = userEvent.setup();
-      const { api } = renderMediaView("media-gallery");
+      renderMediaApp();
       await screen.findByRole("button", { name: "Open panda.png" });
 
       await user.upload(screen.getByTestId("media-upload-input"), new File(["png-bytes"], "new.png", { type: "image/png" }));
 
       await waitFor(() => expect(importMedia).toHaveBeenCalledWith(expect.objectContaining({ filename: "new.png", overwrite: true })));
       expect(mediaFileExists).toHaveBeenCalledWith({ filename: "new.png" });
-      await waitFor(() => expect(api.opened).toEqual([expect.objectContaining({ viewId: "media-item", params: { filename: "new.png" } })]));
-    });
-
-    it("only navigates when shown outside the Media dashboard", async () => {
-      const user = userEvent.setup();
-      state.agents = [mediaAgent];
-      const api = fakeApi("home");
-      renderMediaView("media-gallery", {}, "/", api);
-
-      await user.click(await screen.findByRole("button", { name: "Open panda.png" }));
-      expect(api.opened).toHaveLength(0);
-      expect(pathname()).toBe("/media/panda.png");
-      expect(screen.queryByText("Media agents")).not.toBeInTheDocument();
+      await waitFor(() => expect(pathname()).toBe("/media/new.png"));
     });
   });
 
-  describe("media panel", () => {
-    it("shows the placeholder until an entry is opened", async () => {
+  describe("start tab", () => {
+    it("shows the placeholder and opens a generation tab from it", async () => {
       const user = userEvent.setup();
-      const { api, panel } = renderMediaView("media-item");
+      renderMediaApp();
 
-      expect(await screen.findByText("Select a media item")).toBeInTheDocument();
-      await waitFor(() => expect(panel.title).toBe("Select media"));
-
-      await user.click(screen.getByRole("button", { name: "Generate image" }));
-      expect(api.opened).toEqual([expect.objectContaining({ viewId: "media-generate", params: { kind: "image" } })]);
+      await screen.findByText("Select a media item");
+      await user.click(screen.getAllByRole("button", { name: "Generate image" }).at(-1)!);
+      await waitFor(() => expect(panelOpen("media-generate:image")).toBe(true));
     });
 
-    it("previews an image, names its tab and tells the attached agent what is on screen", async () => {
+    it("opens the generation tab named by ?generate=", async () => {
+      renderMediaApp("/media?generate=video");
+      await waitFor(() => expect(panelOpen("media-generate:video")).toBe(true));
+    });
+
+    it("ignores an unknown ?generate= kind", async () => {
+      renderMediaApp("/media?generate=bogus");
+      expect(await screen.findByText("Select a media item")).toBeInTheDocument();
+      expect(panelOpen("media-generate:image")).toBe(false);
+    });
+  });
+
+  describe("media tab", () => {
+    it("opens a deep-linked file at its URL", async () => {
+      renderMediaApp("/media/panda.png");
+      expect(await screen.findByText("512×512 · Square")).toBeInTheDocument();
+      expect(panelOpen("media-item:panda.png")).toBe(true);
+    });
+
+    it("previews an image and tells the attached agent what is on screen", async () => {
       state.agents = [mediaAgent];
-      const { panel } = renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderMediaApp("/media/panda.png");
 
       expect(await screen.findByText("512×512 · Square")).toBeInTheDocument();
-      await waitFor(() => expect(panel.title).toBe("panda.png"));
       await waitFor(() => expect(updateMediaLibraryState).toHaveBeenCalledWith({ agentId: "agent-1", selectedFilename: "panda.png", selectedKind: "image" }));
+    });
+
+    it("gives image tabs a thumbnail and others none", () => {
+      expect(viewById("media-item").thumbnail?.({ filename: "panda.png" })).toContain("/api/fs/posix/");
+      expect(viewById("media-item").thumbnail?.({ filename: "drone.mp4" })).toBeUndefined();
     });
 
     it("hands the entry to an agent, starting one when none is attached, and opens its chat", async () => {
       const user = userEvent.setup();
-      const { api } = renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderPane("media-item", { filename: "panda.png" });
 
       await user.click(await screen.findByRole("button", { name: /Work on this image/ }));
 
@@ -320,32 +345,32 @@ describe("Media dashboard views", () => {
       const message = (sendInput.mock.calls[0]![0] as { input: { message: string } }).input.message;
       expect(message).toContain("panda.png");
       expect(message).toContain("/api/fs/posix/.tokenring/media-library/panda.png");
-      await waitFor(() => expect(api.opened).toEqual([expect.objectContaining({ viewId: "chat", params: { agentId: "agent-new" } })]));
+      await waitFor(() => expect(panelOpen("chat:agent-new")).toBe(true));
     });
 
     it("transcribes an audio clip through the media agent", async () => {
       const user = userEvent.setup();
       state.agents = [mediaAgent];
-      renderMediaView("media-item", { filename: "hello.mp3" }, "/media/hello.mp3");
+      renderPane("media-item", { filename: "hello.mp3" });
 
       await user.click(await screen.findByRole("button", { name: /Transcribe/ }));
       await waitFor(() => expect(transcribeAudio).toHaveBeenCalledWith({ agentId: "agent-1", filename: "hello.mp3" }));
       expect(await screen.findByText("hello there")).toBeInTheDocument();
     });
 
-    it("offers to close the panel when the entry is gone", async () => {
+    it("offers to close the tab when the entry is gone", async () => {
       const user = userEvent.setup();
-      const { panel } = renderMediaView("media-item", { filename: "ghost.png" }, "/media/ghost.png");
+      renderPane("media-item", { filename: "ghost.png" });
 
       expect(await screen.findByText("Media not found")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Close panel" }));
-      expect(panel.closed).toBe(true);
+      await waitFor(() => expect(panelOpen("media-item:ghost.png")).toBe(false));
     });
 
     it("fetches a deep-linked file that is outside the streamed window", async () => {
       const old = { ...panda, filename: "old-otter.png", prompt: "an otter" };
       getMedia.mockImplementationOnce(async () => ({ media: [old], count: 1 }));
-      renderMediaView("media-item", { filename: "old-otter.png" }, "/media/old-otter.png");
+      renderPane("media-item", { filename: "old-otter.png" });
 
       expect(await screen.findByRole("button", { name: /Work on this image/ })).toBeInTheDocument();
       expect(getMedia).toHaveBeenCalledWith({ search: "old-otter.png", limit: 200 });
@@ -354,7 +379,7 @@ describe("Media dashboard views", () => {
 
     it("ignores lookup results that only partially match the file name", async () => {
       getMedia.mockImplementationOnce(async () => ({ media: [{ ...panda, filename: "ghost.png.bak" }], count: 1 }));
-      renderMediaView("media-item", { filename: "ghost.png" }, "/media/ghost.png");
+      renderPane("media-item", { filename: "ghost.png" });
       expect(await screen.findByText("Media not found")).toBeInTheDocument();
     });
 
@@ -362,7 +387,7 @@ describe("Media dashboard views", () => {
       const user = userEvent.setup();
       state.loaded = false;
       state.streamError = new Error("socket closed");
-      renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderPane("media-item", { filename: "panda.png" });
 
       expect(await screen.findByText("Could not load 'panda.png'")).toBeInTheDocument();
       expect(screen.getByText("socket closed")).toBeInTheDocument();
@@ -375,7 +400,7 @@ describe("Media dashboard views", () => {
       getMedia.mockImplementationOnce(async () => {
         throw new Error("lookup failed");
       });
-      renderMediaView("media-item", { filename: "old.png" }, "/media/old.png");
+      renderPane("media-item", { filename: "old.png" });
 
       expect(await screen.findByText("lookup failed")).toBeInTheDocument();
       getMedia.mockImplementationOnce(async () => ({ media: [{ ...panda, filename: "old.png" }], count: 1 }));
@@ -383,9 +408,9 @@ describe("Media dashboard views", () => {
       expect(await screen.findByRole("button", { name: /Work on this image/ })).toBeInTheDocument();
     });
 
-    it("deletes an entry after confirmation and closes its panel", async () => {
+    it("deletes an entry after confirmation and closes its tab", async () => {
       const user = userEvent.setup();
-      const { panel } = renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderPane("media-item", { filename: "panda.png" });
 
       await user.click(await screen.findByRole("button", { name: "Delete" }));
       expect(await screen.findByText(/Delete “panda.png” from the media library/)).toBeInTheDocument();
@@ -394,12 +419,12 @@ describe("Media dashboard views", () => {
       await user.click(within(dialog).getByRole("button", { name: "Delete" }));
 
       await waitFor(() => expect(deleteMedia).toHaveBeenCalledWith({ filename: "panda.png" }));
-      await waitFor(() => expect(panel.closed).toBe(true));
+      await waitFor(() => expect(panelOpen("media-item:panda.png")).toBe(false));
     });
 
-    it("renames an entry and points the panel at the new name", async () => {
+    it("renames an entry: the new name opens at its URL and the old tab closes", async () => {
       const user = userEvent.setup();
-      const { panel } = renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderMediaApp("/media/panda.png");
 
       await user.click(await screen.findByRole("button", { name: "Rename" }));
       const input = screen.getByLabelText("New file name");
@@ -414,12 +439,13 @@ describe("Media dashboard views", () => {
       await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Rename" }));
 
       await waitFor(() => expect(renameMedia).toHaveBeenCalledWith({ filename: "panda.png", newFilename: "red-panda.png" }));
-      await waitFor(() => expect(panel.params).toEqual({ filename: "red-panda.png" }));
+      await waitFor(() => expect(pathname()).toBe("/media/red-panda.png"));
+      expect(panelOpen("media-item:panda.png")).toBe(false);
     });
 
     it("adds and removes tags", async () => {
       const user = userEvent.setup();
-      renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderPane("media-item", { filename: "panda.png" });
 
       await user.type(await screen.findByLabelText("Add tags"), "zoo, Panda{Enter}");
       await waitFor(() => expect(updateMediaKeywords).toHaveBeenCalledWith({ filename: "panda.png", keywords: ["panda", "cute", "zoo"] }));
@@ -430,7 +456,7 @@ describe("Media dashboard views", () => {
 
     it("generates a variation from the image's prompt and opens it", async () => {
       const user = userEvent.setup();
-      const { api } = renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderMediaApp("/media/panda.png");
 
       await user.click(await screen.findByRole("button", { name: /Edit \/ variation/ }));
       const dialog = screen.getByRole("dialog");
@@ -444,15 +470,13 @@ describe("Media dashboard views", () => {
         agentId: "agent-new",
         request: { prompt: "a red panda wearing a hat", keywords: ["panda", "cute"], sizing: { method: "guided", shape: "square" } },
       });
-      await waitFor(() =>
-        expect(api.opened).toEqual(expect.arrayContaining([expect.objectContaining({ viewId: "media-item", params: { filename: "cat.png" } })])),
-      );
+      await waitFor(() => expect(pathname()).toBe("/media/cat.png"));
     });
 
     it("saves an adjusted copy of the image", async () => {
       const user = userEvent.setup();
       state.agents = [mediaAgent];
-      renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderPane("media-item", { filename: "panda.png" });
 
       await user.click(await screen.findByRole("button", { name: /Edit \/ variation/ }));
       const dialog = screen.getByRole("dialog");
@@ -469,42 +493,36 @@ describe("Media dashboard views", () => {
     });
 
     it("shows the image prompt with a copy button", async () => {
-      renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      renderPane("media-item", { filename: "panda.png" });
       const prompt = await screen.findByTestId("media-prompt");
       expect(prompt).toHaveTextContent("a red panda");
       expect(screen.getByRole("button", { name: "Copy prompt" })).toBeInTheDocument();
     });
 
-    it("clears the agent's selection when the panel showing it closes", async () => {
+    it("clears the agent's selection when the tab showing it closes", async () => {
       state.agents = [mediaAgent];
-      const { unmount } = renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      const { unmount } = renderPane("media-item", { filename: "panda.png" });
       await waitFor(() => expect(updateMediaLibraryState).toHaveBeenCalledWith({ agentId: "agent-1", selectedFilename: "panda.png", selectedKind: "image" }));
 
       unmount();
       expect(updateMediaLibraryState).toHaveBeenLastCalledWith({ agentId: "agent-1", clearSelection: true });
     });
 
-    it("closing a background panel leaves the active panel's selection alone", async () => {
+    it("only the focused tab drives the gallery kind and the agent's selection", async () => {
       state.agents = [mediaAgent];
-      const api = fakeApi();
-      const background = createFakePanelHandle({
-        viewId: "media-item",
-        dashboardId: "media",
-        panelId: "media-item:drone.mp4",
-        params: { filename: "drone.mp4" },
-        isActive: false,
-      });
-      const hidden = renderView(viewById("media-item"), { filename: "drone.mp4" }, { api, panel: background, path: "/media/drone.mp4", routes: ROUTES });
-      renderMediaView("media-item", { filename: "panda.png" }, "/media/panda.png");
+      const { go } = renderMediaApp("/media/panda.png");
       await waitFor(() => expect(updateMediaLibraryState).toHaveBeenCalledWith({ agentId: "agent-1", selectedFilename: "panda.png", selectedKind: "image" }));
 
-      hidden.unmount();
-      expect(updateMediaLibraryState).not.toHaveBeenCalledWith(expect.objectContaining({ clearSelection: true }));
+      // Opening a second file in the background mounts it without taking over.
+      go("/media/drone.mp4");
+      await waitFor(() => expect(updateMediaLibraryState).toHaveBeenCalledWith({ agentId: "agent-1", selectedFilename: "drone.mp4", selectedKind: "video" }));
+      expect(getMediaBrowserStateForTest().kind).toBe("video");
+      expect(panelOpen("media-item:panda.png")).toBe(true);
     });
 
     it("waits for the library instead of claiming a just-generated file is missing", async () => {
       markGenerated("fresh.png");
-      renderMediaView("media-item", { filename: "fresh.png" }, "/media/fresh.png");
+      renderPane("media-item", { filename: "fresh.png" });
 
       await waitFor(() => expect(screen.queryByText("Media not found")).not.toBeInTheDocument());
     });
@@ -518,71 +536,35 @@ describe("Media dashboard views", () => {
       } finally {
         Date.now = realNow;
       }
-      renderMediaView("media-item", { filename: "late.png" }, "/media/late.png");
+      renderPane("media-item", { filename: "late.png" });
 
       expect(screen.queryByText("Media not found")).not.toBeInTheDocument();
       expect(await screen.findByText("Media not found", {}, { timeout: 2000 })).toBeInTheDocument();
     });
-
-    it("only the active item panel drives the gallery kind and the agent's selection", async () => {
-      state.agents = [mediaAgent];
-      const api = fakeApi();
-      const panel = createFakePanelHandle({
-        viewId: "media-item",
-        dashboardId: "media",
-        panelId: "media-item:drone.mp4",
-        params: { filename: "drone.mp4" },
-        isActive: false,
-      });
-      const { rerenderView } = renderView(viewById("media-item"), { filename: "drone.mp4" }, { api, panel, path: "/media/drone.mp4", routes: ROUTES });
-
-      expect(await screen.findByRole("button", { name: /Work on this video/ })).toBeInTheDocument();
-      // A mounted but inactive panel (renderer "always") leaves the shared state alone.
-      await new Promise(resolve => setTimeout(resolve, 20));
-      expect(updateMediaLibraryState).not.toHaveBeenCalled();
-      expect(getMediaBrowserStateForTest().kind).toBe("image");
-
-      act(() => panel.setActive(true));
-      rerenderView();
-      await waitFor(() => expect(updateMediaLibraryState).toHaveBeenCalledWith({ agentId: "agent-1", selectedFilename: "drone.mp4", selectedKind: "video" }));
-      expect(getMediaBrowserStateForTest().kind).toBe("video");
-    });
-
-    it("off the Media dashboard, 'Generate' lands on a URL that opens the form", async () => {
-      const user = userEvent.setup();
-      const api = fakeApi("home");
-      const panel = createFakePanelHandle({ viewId: "media-item", dashboardId: "home", panelId: "media-item:new", params: {} });
-      renderView(viewById("media-item"), {}, { api, panel, path: "/", routes: ["/"], extraRoutes: <Route path="/media" element={<SearchProbe />} /> });
-
-      await user.click(await screen.findByRole("button", { name: "Generate image" }));
-      expect(api.opened).toHaveLength(0);
-      expect(await screen.findByTestId("landing")).toHaveTextContent("/media?generate=image");
-
-      // ...and the Media dashboard's onNavigate opens the form for that URL.
-      const mediaApi = fakeApi();
-      mediaApi.panels.push({ panelId: "media-gallery", viewId: "media-gallery", params: {}, title: "Gallery" });
-      dashboard.onNavigate?.({ pathname: "/media", params: {}, searchParams: new URLSearchParams("generate=image") }, mediaApi);
-      expect(mediaApi.opened.map(open => [open.viewId, open.params])).toEqual([["media-generate", { kind: "image" }]]);
-    });
   });
 
-  describe("generate panels", () => {
-    it("generates an image and opens the new file in its own panel", async () => {
+  describe("generate tabs", () => {
+    it("opens a generation form at its URL", async () => {
+      renderMediaApp("/media/generate/video");
+      await waitFor(() => expect(panelOpen("media-generate:video")).toBe(true));
+      expect(await screen.findByRole("button", { name: /Generate Video/ })).toBeInTheDocument();
+    });
+
+    it("generates an image and opens the new file in its own tab", async () => {
       const user = userEvent.setup();
-      const { api } = renderMediaView("media-generate", { kind: "image" }, "/media");
+      renderPane("media-generate", { kind: "image" });
 
       await user.type(await screen.findByLabelText(/Prompt/i), "a red panda");
       await user.click(screen.getByRole("button", { name: /Generate Image/ }));
 
       await waitFor(() => expect(generateImage).toHaveBeenCalled());
       expect(generateImage.mock.calls[0]![0]).toMatchObject({ agentId: "agent-new", request: { prompt: "a red panda" } });
-      await waitFor(() => expect(api.opened).toEqual([expect.objectContaining({ viewId: "media-item", params: { filename: "cat.png" } })]));
-      expect(pathname()).toBe("/media/cat.png");
+      await waitFor(() => expect(pathname()).toBe("/test/cat.png"));
     });
 
     it("explains how to configure a provider when no generation models exist", async () => {
       state.imageModels = { "dall-e-3": { available: false } };
-      renderMediaView("media-generate", { kind: "image" });
+      renderPane("media-generate", { kind: "image" });
 
       const notice = await screen.findByTestId("no-models-notice");
       expect(notice).toHaveTextContent("No image generation models available");
@@ -591,55 +573,18 @@ describe("Media dashboard views", () => {
       expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     });
 
-    it("generates speech from the audio panel", async () => {
+    it("titles the tab and generates speech from the audio form", async () => {
       const user = userEvent.setup();
       state.agents = [mediaAgent];
-      const { panel } = renderMediaView("media-generate", { kind: "audio" }, "/media");
+      renderMediaApp("/media?generate=audio");
 
-      await waitFor(() => expect(panel.title).toBe("Generate speech"));
+      await waitFor(() => expect(panelOpen("media-generate:audio")).toBe(true));
+      expect(screen.getAllByText("Generate speech").length).toBeGreaterThan(0);
       await user.type(await screen.findByLabelText("Text"), "hello");
       await user.click(screen.getByRole("button", { name: /Generate Speech/ }));
 
       await waitFor(() => expect(generateSpeech).toHaveBeenCalled());
       expect(generateSpeech.mock.calls[0]![0]).toMatchObject({ agentId: "agent-1", text: "hello" });
-    });
-  });
-
-  describe("dashboard definition", () => {
-    it("opens the entry named by the route in the main area", () => {
-      const api = fakeApi();
-      api.panels.push({ panelId: "media-gallery", viewId: "media-gallery", params: {}, title: "Gallery" });
-      const match = (path: string, params: Record<string, string | undefined>) => ({ pathname: path, params, searchParams: new URLSearchParams() });
-
-      dashboard.onNavigate?.(match("/media", {}), api);
-      dashboard.onNavigate?.({ ...match("/media", {}), searchParams: new URLSearchParams("generate=bogus") }, api);
-      dashboard.onNavigate?.(match("/media/panda.png", { filename: "panda.png" }), api);
-
-      expect(api.opened.map(open => [open.viewId, open.params])).toEqual([["media-item", { filename: "panda.png" }]]);
-      expect(api.opened[0]!.options).toMatchObject({ position: "right", referencePanelId: "media-gallery" });
-    });
-
-    it("fills the placeholder panel instead of adding a second media panel", () => {
-      const api = fakeApi();
-      api.panels.push({ panelId: "media-gallery", viewId: "media-gallery", params: {}, title: "Gallery" });
-      api.panels.push({ panelId: "media-item:new", viewId: "media-item", params: {}, title: "Select media" });
-
-      dashboard.onNavigate?.({ pathname: "/media/panda.png", params: { filename: "panda.png" }, searchParams: new URLSearchParams() }, api);
-
-      expect(api.opened).toHaveLength(0);
-      expect(api.panels.find(panel => panel.panelId === "media-item:new")?.params).toEqual({ filename: "panda.png" });
-    });
-
-    it("maps the active panel back to a URL and titles the document", () => {
-      const path = (viewId: string, params: ViewParams = {}) => dashboard.pathForActivePanel?.({ panelId: viewId, viewId, params });
-
-      expect(path("media-item", { filename: "a b.png" })).toBe("/media/a%20b.png");
-      expect(path("media-item")).toBeNull();
-      expect(path("media-gallery")).toBeNull();
-      expect(path("media-generate", { kind: "image" })).toBeNull();
-      expect(dashboard.documentTitle?.({ pathname: "/media/panda.png", params: { filename: "panda.png" }, searchParams: new URLSearchParams() })).toBe(
-        "panda.png · Media",
-      );
     });
   });
 });

@@ -1,69 +1,18 @@
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
-import { useDashboardApi } from "@tokenring-ai/one-frontend/dock/DashboardApiContext.tsx";
-import { openInMainArea } from "@tokenring-ai/one-frontend/dock/layout/mainArea.ts";
 import { useAppAgentSession } from "@tokenring-ai/one-frontend/hooks/useAppAgentSession.tsx";
 import { useRefSync } from "@tokenring-ai/one-frontend/hooks/useRefSync.ts";
 import { toastOnReject } from "@tokenring-ai/one-frontend/lib/toastOnReject.ts";
 import { agentRPCClient, mediaLibraryRPCClient, useMediaLibraryConfiguration } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { AGENT_TYPE_PREFERENCES, MEDIA_AGENT_TYPES } from "../features/media/constants.ts";
-import type { MediaEntry, MediaKind } from "../features/media/types.ts";
+import type { MediaEntry } from "../features/media/types.ts";
 import { workOnMediaMessage } from "../features/media/utils.ts";
-import { MEDIA_DASHBOARD_ID, MEDIA_GENERATE_VIEW, MEDIA_ITEM_VIEW, MEDIA_SIDEBAR_VIEWS } from "../manifest.ts";
-import { mediaGeneratePath, mediaItemPath } from "./paths.ts";
 
 /**
- * Hooks shared by the Media dashboard views. Each view is its own React
- * subtree, so navigation, the attached agent and the agent's idea of the
- * current selection are resolved here rather than passed down as props.
+ * Agent hooks shared by the Media panes on the layout engine: the attached
+ * agent session and the selection the agent's tools act on.
  */
-
-/**
- * Navigation between the Media views. Each action opens the target panel in
- * the main area right away (so a panel the user closed re-opens even when the
- * URL does not change) and then updates the URL. Off the Media dashboard it
- * only navigates, to a URL whose `onNavigate` opens the same panel there.
- */
-export function useMediaNavigation() {
-  const navigate = useNavigate();
-  const dashboard = useDashboardApi();
-  const onDashboard = dashboard.dashboardId === MEDIA_DASHBOARD_ID;
-
-  return {
-    /** Opens (or focuses) the panel for one media file. */
-    openItem: useCallback(
-      (filename: string, options?: { replace?: boolean }) => {
-        if (onDashboard) {
-          openInMainArea(dashboard, MEDIA_ITEM_VIEW, { filename }, { sidebarViews: MEDIA_SIDEBAR_VIEWS, fillPlaceholder: true });
-        }
-        void navigate(mediaItemPath(filename), options?.replace ? { replace: true } : undefined);
-      },
-      [dashboard, navigate, onDashboard],
-    ),
-    /** Opens the generation form for one kind; the panels of different kinds coexist. */
-    openGenerate: useCallback(
-      (kind: MediaKind) => {
-        if (onDashboard) {
-          openInMainArea(dashboard, MEDIA_GENERATE_VIEW, { kind }, { sidebarViews: MEDIA_SIDEBAR_VIEWS });
-          return;
-        }
-        // `?generate=<kind>` makes the dashboard open the form on arrival.
-        void navigate(mediaGeneratePath(kind));
-      },
-      [dashboard, navigate, onDashboard],
-    ),
-    /** Opens (or focuses) the chat panel for an agent without leaving the dashboard. */
-    openAgentChat: useCallback(
-      (agentId: string) => {
-        if (onDashboard) dashboard.openView("chat", { agentId }, { position: "right" });
-        else void navigate(`/agent/${agentId}`);
-      },
-      [dashboard, navigate, onDashboard],
-    ),
-  };
-}
 
 export interface MediaAgentSession extends ReturnType<typeof useAppAgentSession> {
   /** Agent types the media library is configured for. */
