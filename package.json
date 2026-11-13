@@ -10,8 +10,8 @@
     "@tokenring-ai/lifecycle": "workspace:*",
     "@tokenring-ai/rpc": "workspace:*",
     "@tokenring-ai/utility": "workspace:*",
-    "exiftool-vendored": "^36.1.0",
-    "zod": "^4.4.3"
+    "exiftool-vendored": "^39.2.0",
+    "zod": "^4.6.7"
   },
   "exports": {
     ".": "./index.ts",
