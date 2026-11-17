@@ -1,8 +1,6 @@
-import { Settings2 } from "lucide-react";
+import { AI_PROVIDERS_PATH } from "@tokenring-ai/one-frontend/apps/configuration/manifest.ts";
+import { Plug } from "lucide-react";
 import { Link } from "react-router-dom";
-
-/** Configuration page for the AI client plugin, where model providers are set up. */
-export const AI_CLIENT_CONFIG_PATH = `/configuration/${encodeURIComponent("@tokenring-ai/ai-client")}`;
 
 /**
  * Replaces the model picker when no provider offers a model of this kind, so
@@ -16,12 +14,9 @@ export default function NoModelsNotice({ capability }: { capability: string }) {
       data-testid="no-models-notice"
     >
       <p className="font-medium text-primary">No {capability} models available</p>
-      <p className="text-muted">
-        Generating needs an AI provider that offers {capability}. Add one under <code>ai.providers</code>, or set its API key environment variable (e.g.{" "}
-        <code>OPENAI_API_KEY</code>) with <code>ai.autoConfigure</code> on.
-      </p>
-      <Link to={AI_CLIENT_CONFIG_PATH} className="inline-flex items-center gap-1 font-medium text-accent hover:underline focus-ring rounded">
-        <Settings2 className="w-3 h-3" aria-hidden="true" /> Open AI model configuration
+      <p className="text-muted">Generating needs an AI provider that offers {capability}. Connect one by pasting its API key.</p>
+      <Link to={AI_PROVIDERS_PATH} className="inline-flex items-center gap-1 font-medium text-accent hover:underline focus-ring rounded">
+        <Plug className="w-3 h-3" aria-hidden="true" /> Connect an AI provider
       </Link>
     </div>
   );

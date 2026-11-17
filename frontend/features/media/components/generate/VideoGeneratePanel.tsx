@@ -1,10 +1,12 @@
+import EstimatedCost from "@tokenring-ai/one-frontend/components/ui/EstimatedCost.tsx";
 import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
+import { useCostEstimate } from "@tokenring-ai/one-frontend/hooks/useCostEstimate.ts";
 import { useVideoGenerationModels, videoGenerationRPCClient } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { Video as VideoIcon } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { EnsureAgent } from "../../types.ts";
 import { keywordsFromPrompt } from "../../utils.ts";
 import GeneratePanelShell from "./GeneratePanelShell.tsx";
@@ -21,6 +23,8 @@ export default function VideoGeneratePanel({ ensureAgent, onGenerated }: { ensur
   const [quality, setQuality] = useState<VideoQuality>("standard");
   const [duration, setDuration] = useState<number>(5);
   const [generating, setGenerating] = useState(false);
+  // A ref, not the state: two Cmd+Enter presses in one render would both pass a state check (and pay twice).
+  const generatingRef = useRef(false);
   const { data: modelsData } = useVideoGenerationModels();
 
   const availableModels = useMemo(() => {
@@ -32,11 +36,21 @@ export default function VideoGeneratePanel({ ensureAgent, onGenerated }: { ensur
 
   const selectedModel = model || availableModels[0] || "";
 
+  // Only options that change the price re-check it; typing the prompt does not.
+  const estimate = useCostEstimate(selectedModel ? `${selectedModel}|${shape}|${quality}|${duration}` : null, () =>
+    videoGenerationRPCClient.estimateCost({
+      model: selectedModel,
+      request: { sizing: { method: "guided", quality, shape }, ...(duration > 0 && { duration }) },
+    }),
+  );
+
   const handleGenerate = async () => {
+    if (generatingRef.current) return;
     if (!prompt.trim()) {
       toastManager.error("Please enter a prompt", { duration: 3000 });
       return;
     }
+    generatingRef.current = true;
     setGenerating(true);
     try {
       // Generation needs an agent; attach to the media agent, starting one if needed.
@@ -71,6 +85,7 @@ export default function VideoGeneratePanel({ ensureAgent, onGenerated }: { ensur
     } catch (err) {
       toastManager.error(formatError(err), { duration: 5000 });
     } finally {
+      generatingRef.current = false;
       setGenerating(false);
     }
   };
@@ -122,6 +137,7 @@ export default function VideoGeneratePanel({ ensureAgent, onGenerated }: { ensur
       >
         Generate Video
       </GenerateButton>
+      <EstimatedCost estimate={estimate} />
     </GeneratePanelShell>
   );
 }

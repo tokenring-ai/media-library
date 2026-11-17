@@ -279,7 +279,7 @@ export default class MediaLibraryService implements TokenRingService {
 
   /**
    * Path to the media library relative to the WORKSPACE directory.
-   * FileSystemService and `/api/fs/{provider}/...` resolve relative paths
+   * FileSystemService and `/api/fs/...` resolve relative paths
    * against the workspace directory. Typically `media-library`.
    */
   getServeDirectory(): string {

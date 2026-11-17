@@ -1,6 +1,7 @@
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
 import { useAppAgentSession } from "@tokenring-ai/one-frontend/hooks/useAppAgentSession.tsx";
 import { useRefSync } from "@tokenring-ai/one-frontend/hooks/useRefSync.ts";
+import { requireAgentFound } from "@tokenring-ai/one-frontend/lib/requireAgentFound.ts";
 import { toastOnReject } from "@tokenring-ai/one-frontend/lib/toastOnReject.ts";
 import { agentRPCClient, mediaLibraryRPCClient, useMediaLibraryConfiguration } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
@@ -19,7 +20,7 @@ export interface MediaAgentSession extends ReturnType<typeof useAppAgentSession>
   agentTypes: string[];
   /**
    * The attached agent, creating one on demand — generation, transcription and
-   * "work on this" all need an agent, and the old app kept a hidden headless
+   * "work on this" all need an agent, and the old app kept a hidden background
    * one around for exactly that.
    */
   ensureAgent: (preferredTypes?: readonly string[]) => Promise<string | null>;
@@ -119,13 +120,15 @@ export async function workOnMedia(
     toastManager.warning(`Media selection could not be synced: ${formatError(error)}`, { duration: 4000 });
   }
   try {
-    await agentRPCClient.sendInput({
-      agentId,
-      input: {
-        from: "Media app",
-        message: workOnMediaMessage(entry.kind, entry.filename, entry.keywords, { directory: serveDirectory }),
-      },
-    });
+    requireAgentFound(
+      await agentRPCClient.sendInput({
+        agentId,
+        input: {
+          from: "Media app",
+          message: workOnMediaMessage(entry.kind, entry.filename, entry.keywords, { directory: serveDirectory }),
+        },
+      }),
+    );
   } catch (error: unknown) {
     toastManager.error(formatError(error), { duration: 5000 });
     return null;

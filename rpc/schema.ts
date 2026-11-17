@@ -67,7 +67,7 @@ export default {
         /** Configured output directory name relative to the workspace (e.g. `media-library`). */
         outputDirectory: z.string(),
         /**
-         * Working-directory-relative path for `/api/fs/{provider}/...` URLs.
+         * Working-directory-relative path for `/api/fs/...` URLs.
          * Typically `.tokenring/media-library` when workspaceDirectory is `<working>/.tokenring`.
          */
         serveDirectory: z.string(),

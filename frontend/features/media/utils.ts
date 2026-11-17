@@ -1,9 +1,6 @@
 import { triggerDownloadFromUrl } from "@tokenring-ai/one-frontend/lib/triggerDownloadFromUrl.ts";
 import { workspaceFileUrl } from "@tokenring-ai/one-frontend/lib/workspaceFileUrl.ts";
 
-/** Default filesystem provider used for media-library files on disk. */
-const DEFAULT_MEDIA_PROVIDER = "posix";
-
 /**
  * Default `/api/fs` path when config has not loaded yet.
  * Matches default layout: workspaceDirectory = `<working>/.tokenring`, outputDirectory = `media-library`.
@@ -11,9 +8,8 @@ const DEFAULT_MEDIA_PROVIDER = "posix";
 export const DEFAULT_MEDIA_SERVE_DIRECTORY = ".tokenring/media-library";
 
 export type MediaUrlOptions = {
-  provider?: string;
   /**
-   * Working-directory-relative directory for `/api/fs/{provider}/...` (e.g. `.tokenring/media-library`).
+   * Workspace-relative directory for `/api/fs/...` (e.g. `.tokenring/media-library`).
    * Prefer `serveDirectory` from `getMediaLibraryConfiguration` when available.
    */
   directory?: string;
@@ -21,10 +17,9 @@ export type MediaUrlOptions = {
 
 /** HTTP URL for a media-library file served via the filesystem plugin. */
 export function mediaUrl(filename: string, options: MediaUrlOptions = {}): string {
-  const provider = options.provider ?? DEFAULT_MEDIA_PROVIDER;
   const directory = options.directory ?? DEFAULT_MEDIA_SERVE_DIRECTORY;
   const filePath = `${directory.replace(/\/+$/, "")}/${filename}`;
-  return workspaceFileUrl(provider, filePath);
+  return workspaceFileUrl(filePath);
 }
 
 export function aspectLabel(width: number, height: number) {

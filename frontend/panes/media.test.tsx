@@ -65,13 +65,17 @@ const updateMediaLibraryState = mock(async (_args: Record<string, unknown>) => (
   selectedFilename: null,
   selectedKind: null,
 }));
-const createAgent = mock(async (_args: { agentType: string; headless: boolean }) => ({ id: "agent-new", displayName: "Media Agent", description: "" }));
+const createAgent = mock(async (_args: { agentType: string }) => ({ id: "agent-new", displayName: "Media Agent", description: "" }));
 const deleteAgent = mock(async (_args: { agentId: string; reason: string }) => ({ status: "success" as const }));
 const sendInput = mock(async (_args: Record<string, unknown>) => ({ status: "success" as const, requestId: "req-1" }));
 const generateImage = mock(async (_args: Record<string, unknown>) => ({ status: "success" as const, results: [{ fileName: "cat.png" }] }));
 const generateVideo = mock(async (_args: Record<string, unknown>) => ({ status: "success" as const, filename: "clip.mp4" }));
 const generateSpeech = mock(async (_args: Record<string, unknown>) => ({ status: "success" as const, filename: "speech.mp3" }));
 const transcribeAudio = mock(async (_args: { agentId: string; filename: string }) => ({ status: "success" as const, text: "hello there" }));
+type TestEstimate = { amountUsd: number | null; model: string | null };
+const estimateImageCost = mock(async (_args: Record<string, unknown>): Promise<TestEstimate> => ({ amountUsd: 0.04, model: "dall-e-3" }));
+const estimateVideoCost = mock(async (_args: Record<string, unknown>): Promise<TestEstimate> => ({ amountUsd: 0.5, model: "sora" }));
+const estimateSpeechCost = mock(async (_args: Record<string, unknown>): Promise<TestEstimate> => ({ amountUsd: 0.002, model: "tts" }));
 const mutateMedia = mock(async () => undefined);
 const getMedia = mock(async (_args: { search?: string; limit?: number }) => ({ media: [] as Entry[], count: 0 }));
 const reindexMedia = mock(async (_args: Record<string, never>) => ({ total: 4, added: 1, removed: 0, kept: 3 }));
@@ -105,9 +109,9 @@ void mock.module("@tokenring-ai/one-frontend/rpc.ts", () => ({
   useAgentList: () => ({ data: state.agents, isLoading: false, error: undefined, mutate: mock(async () => undefined) }),
   useAgentTypes: () => ({ data: [{ type: "media", displayName: "Media Agent", description: "", enabledTools: [] }], isLoading: false }),
   agentRPCClient: { createAgent, deleteAgent, sendInput },
-  imageGenerationRPCClient: { generateImage, adjustImage },
-  videoGenerationRPCClient: { generateVideo },
-  audioRPCClient: { generateSpeech, transcribeAudio },
+  imageGenerationRPCClient: { generateImage, adjustImage, estimateCost: estimateImageCost },
+  videoGenerationRPCClient: { generateVideo, estimateCost: estimateVideoCost },
+  audioRPCClient: { generateSpeech, transcribeAudio, estimateCost: estimateSpeechCost },
   useImageGenerationModels: () => ({ data: { models: state.imageModels }, isLoading: false }),
   useVideoGenerationModels: () => ({ data: { models: { sora: { available: true } } }, isLoading: false }),
   useSpeechModels: () => ({ data: { models: { tts: { available: true } } }, isLoading: false }),
@@ -180,6 +184,9 @@ describe("Media app", () => {
       importMedia,
       mediaFileExists,
       adjustImage,
+      estimateImageCost,
+      estimateVideoCost,
+      estimateSpeechCost,
     ]) {
       fn.mockClear();
     }
@@ -189,6 +196,9 @@ describe("Media app", () => {
     state.count = undefined;
     state.streamError = undefined;
     state.imageModels = { "dall-e-3": { available: true } };
+    estimateImageCost.mockImplementation(async () => ({ amountUsd: 0.04, model: "dall-e-3" }));
+    estimateVideoCost.mockImplementation(async () => ({ amountUsd: 0.5, model: "sora" }));
+    estimateSpeechCost.mockImplementation(async () => ({ amountUsd: 0.002, model: "tts" }));
     resetSyncedMediaSelection();
   });
 
@@ -330,7 +340,7 @@ describe("Media app", () => {
     });
 
     it("gives image tabs a thumbnail and others none", () => {
-      expect(viewById("media-item").thumbnail?.({ filename: "panda.png" })).toContain("/api/fs/posix/");
+      expect(viewById("media-item").thumbnail?.({ filename: "panda.png" })).toContain("/api/fs/");
       expect(viewById("media-item").thumbnail?.({ filename: "drone.mp4" })).toBeUndefined();
     });
 
@@ -340,11 +350,11 @@ describe("Media app", () => {
 
       await user.click(await screen.findByRole("button", { name: /Work on this image/ }));
 
-      await waitFor(() => expect(createAgent).toHaveBeenCalledWith({ agentType: "media", headless: false }));
+      await waitFor(() => expect(createAgent).toHaveBeenCalledWith({ agentType: "media" }));
       await waitFor(() => expect(sendInput).toHaveBeenCalled());
       const message = (sendInput.mock.calls[0]![0] as { input: { message: string } }).input.message;
       expect(message).toContain("panda.png");
-      expect(message).toContain("/api/fs/posix/.tokenring/media-library/panda.png");
+      expect(message).toContain("/api/fs/.tokenring/media-library/panda.png");
       await waitFor(() => expect(panelOpen("chat:agent-new")).toBe(true));
     });
 
@@ -562,14 +572,86 @@ describe("Media app", () => {
       await waitFor(() => expect(pathname()).toBe("/test/cat.png"));
     });
 
+    describe("estimated price", () => {
+      const price = (timeout = 3000) => screen.findByTestId("estimated-cost", {}, { timeout });
+
+      it("shows the image price for the selected model and options, not per prompt keystroke", async () => {
+        const user = userEvent.setup();
+        renderPane("media-generate", { kind: "image" });
+
+        expect(await price()).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByTestId("estimated-cost")).toHaveTextContent("about $0.04"));
+        expect(estimateImageCost).toHaveBeenCalledTimes(1);
+        expect(estimateImageCost).toHaveBeenCalledWith({ model: "dall-e-3", request: { sizing: { method: "guided", quality: "standard", shape: "square" } } });
+
+        await user.type(screen.getByLabelText(/Prompt/i), "a red panda in a hat");
+        await new Promise(resolve => setTimeout(resolve, 700));
+        expect(estimateImageCost).toHaveBeenCalledTimes(1);
+      });
+
+      it("re-checks the price when a price-affecting option changes", async () => {
+        const user = userEvent.setup();
+        renderPane("media-generate", { kind: "image" });
+        await waitFor(() => expect(screen.getByTestId("estimated-cost")).toHaveTextContent("about $0.04"), { timeout: 3000 });
+
+        estimateImageCost.mockImplementation(async () => ({ amountUsd: 0.12, model: "dall-e-3" }));
+        await user.click(screen.getByRole("button", { name: /^High/ }));
+        await waitFor(() => expect(screen.getByTestId("estimated-cost")).toHaveTextContent("about $0.12"), { timeout: 3000 });
+        expect(estimateImageCost).toHaveBeenCalledTimes(2);
+      });
+
+      it("shows a placeholder while the price is being checked", async () => {
+        estimateImageCost.mockImplementation(() => new Promise<TestEstimate>(() => {}));
+        renderPane("media-generate", { kind: "image" });
+        expect(await price()).toHaveTextContent("Estimating price");
+      });
+
+      it("says the price is not available when the model has none", async () => {
+        estimateImageCost.mockImplementation(async () => ({ amountUsd: null, model: "dall-e-3" }));
+        renderPane("media-generate", { kind: "image" });
+        await waitFor(() => expect(screen.getByTestId("estimated-cost")).toHaveTextContent("price not available"), { timeout: 3000 });
+      });
+
+      it("hides the price silently when the check fails", async () => {
+        estimateImageCost.mockImplementation(async () => {
+          throw new Error("boom");
+        });
+        renderPane("media-generate", { kind: "image" });
+        await waitFor(() => expect(estimateImageCost).toHaveBeenCalled(), { timeout: 3000 });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(screen.queryByTestId("estimated-cost")).not.toBeInTheDocument();
+      });
+
+      it("prices video with its duration", async () => {
+        renderPane("media-generate", { kind: "video" });
+        await waitFor(() => expect(screen.getByTestId("estimated-cost")).toHaveTextContent("about $0.50"), { timeout: 3000 });
+        expect(estimateVideoCost).toHaveBeenCalledWith({
+          model: "sora",
+          request: { sizing: { method: "guided", quality: "standard", shape: "landscape" }, duration: 5 },
+        });
+      });
+
+      it("prices speech only once there is text, by bucketed length", async () => {
+        const user = userEvent.setup();
+        renderPane("media-generate", { kind: "audio" });
+        await screen.findByLabelText("Text");
+        expect(screen.queryByTestId("estimated-cost")).not.toBeInTheDocument();
+
+        await user.type(screen.getByLabelText("Text"), "Hello there");
+        await waitFor(() => expect(screen.getByTestId("estimated-cost")).toHaveTextContent("about $0.002"), { timeout: 3000 });
+        expect(estimateSpeechCost).toHaveBeenCalledTimes(1);
+        expect(estimateSpeechCost).toHaveBeenCalledWith({ model: "tts", text: "x".repeat(100) });
+      });
+    });
+
     it("explains how to configure a provider when no generation models exist", async () => {
       state.imageModels = { "dall-e-3": { available: false } };
       renderPane("media-generate", { kind: "image" });
 
       const notice = await screen.findByTestId("no-models-notice");
       expect(notice).toHaveTextContent("No image generation models available");
-      expect(notice).toHaveTextContent("ai.providers");
-      expect(screen.getByRole("link", { name: /Open AI model configuration/ })).toHaveAttribute("href", "/configuration/%40tokenring-ai%2Fai-client");
+      expect(notice).toHaveTextContent("Connect one by pasting its API key");
+      expect(screen.getByRole("link", { name: /Connect an AI provider/ })).toHaveAttribute("href", "/configuration/ai-providers");
       expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     });
 

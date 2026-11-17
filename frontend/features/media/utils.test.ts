@@ -11,12 +11,12 @@ const doc: CreateElementHost = document;
 
 describe("mediaUrl", () => {
   it("builds a filesystem HTTP URL under the default serve directory", () => {
-    expect(mediaUrl("panda.png")).toBe("/api/fs/posix/.tokenring/media-library/panda.png");
-    expect(mediaUrl("a b.png")).toBe("/api/fs/posix/.tokenring/media-library/a%20b.png");
+    expect(mediaUrl("panda.png")).toBe("/api/fs/.tokenring/media-library/panda.png");
+    expect(mediaUrl("a b.png")).toBe("/api/fs/.tokenring/media-library/a%20b.png");
   });
 
-  it("accepts custom provider and directory", () => {
-    expect(mediaUrl("x.png", { provider: "other", directory: "custom-media" })).toBe("/api/fs/other/custom-media/x.png");
+  it("accepts a custom directory", () => {
+    expect(mediaUrl("x.png", { directory: "custom-media" })).toBe("/api/fs/custom-media/x.png");
   });
 });
 
@@ -53,7 +53,7 @@ describe("downloadMedia", () => {
       const call = fetchMock.mock.calls[0];
       expect(call).toBeDefined();
       const [calledUrl, calledInit] = call!;
-      expect(calledUrl).toBe("/api/fs/posix/.tokenring/media-library/panda.png");
+      expect(calledUrl).toBe("/api/fs/.tokenring/media-library/panda.png");
       expect(calledInit?.credentials).toBe("include");
       expect(createObjectURL).toHaveBeenCalled();
       expect(click).toHaveBeenCalled();
@@ -148,7 +148,7 @@ describe("workOnMediaMessage", () => {
     const msg = workOnMediaMessage("image", "panda.png", ["panda", "wildlife"]);
     expect(msg).toContain("image");
     expect(msg).toContain("Filename: panda.png");
-    expect(msg).toContain("URL: /api/fs/posix/.tokenring/media-library/panda.png");
+    expect(msg).toContain("URL: /api/fs/.tokenring/media-library/panda.png");
     expect(msg).toContain("Keywords: panda, wildlife");
   });
 });

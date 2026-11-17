@@ -1,10 +1,12 @@
+import EstimatedCost from "@tokenring-ai/one-frontend/components/ui/EstimatedCost.tsx";
 import GenerateButton from "@tokenring-ai/one-frontend/components/ui/GenerateButton.tsx";
 import { toastManager } from "@tokenring-ai/one-frontend/components/ui/toast.tsx";
+import { bucketTextLength, useCostEstimate } from "@tokenring-ai/one-frontend/hooks/useCostEstimate.ts";
 import { audioRPCClient, useSpeechModels } from "@tokenring-ai/one-frontend/rpc.ts";
 import formatError from "@tokenring-ai/utility/error/formatError";
 import { Mic } from "lucide-react";
 import type { KeyboardEvent } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { EnsureAgent } from "../../types.ts";
 import { keywordsFromPrompt } from "../../utils.ts";
 import GeneratePanelShell from "./GeneratePanelShell.tsx";
@@ -17,6 +19,8 @@ export default function SpeechGeneratePanel({ ensureAgent, onGenerated }: { ensu
   const [speed, setSpeed] = useState<number>(1);
   const [model, setModel] = useState<string>("");
   const [generating, setGenerating] = useState(false);
+  // A ref, not the state: two Cmd+Enter presses in one render would both pass a state check (and pay twice).
+  const generatingRef = useRef(false);
   const { data: modelsData } = useSpeechModels();
 
   const availableModels = useMemo(() => {
@@ -28,11 +32,19 @@ export default function SpeechGeneratePanel({ ensureAgent, onGenerated }: { ensu
 
   const selectedModel = model || availableModels[0] || "";
 
+  // Priced per character, so only a bucketed length of the text matters, not each keystroke.
+  const textLength = bucketTextLength(text.trim().length);
+  const estimate = useCostEstimate(selectedModel && textLength > 0 ? `${selectedModel}|${textLength}` : null, () =>
+    audioRPCClient.estimateCost({ model: selectedModel, text: "x".repeat(textLength) }),
+  );
+
   const handleGenerate = async () => {
+    if (generatingRef.current) return;
     if (!text.trim()) {
       toastManager.error("Please enter some text", { duration: 3000 });
       return;
     }
+    generatingRef.current = true;
     setGenerating(true);
     try {
       // Generation needs an agent; attach to the media agent, starting one if needed.
@@ -61,6 +73,7 @@ export default function SpeechGeneratePanel({ ensureAgent, onGenerated }: { ensu
     } catch (err) {
       toastManager.error(formatError(err), { duration: 5000 });
     } finally {
+      generatingRef.current = false;
       setGenerating(false);
     }
   };
@@ -140,6 +153,7 @@ export default function SpeechGeneratePanel({ ensureAgent, onGenerated }: { ensu
       >
         Generate Speech
       </GenerateButton>
+      <EstimatedCost estimate={estimate} />
     </GeneratePanelShell>
   );
 }

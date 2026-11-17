@@ -24,18 +24,18 @@ Media entries are stored as newline-delimited JSON in `media_index.json` inside 
 - `@tokenring-ai/image` — Generates and edits images stored in the media library
 - `@tokenring-ai/video` — Generates videos stored in the media library
 - `@tokenring-ai/audio` — Records audio and stores generated speech in the media library
-- `@tokenring-ai/filesystem` — Serves media files over HTTP via the filesystem plugin's `/api/fs/{provider}/...` route
+- `@tokenring-ai/filesystem` — Serves media files over HTTP via the filesystem plugin's `/api/fs/<workspace-relative path>` route
 
 Media files are served by the filesystem plugin over HTTP (not by this package directly):
 
 ```text
-/api/fs/{provider}/{outputDirectory}/<filename>
+/api/fs/{outputDirectory}/<filename>
 ```
 
-Example with defaults (`posix` provider, `media-library` directory):
+Example with defaults (`media-library` directory):
 
 ```text
-/api/fs/posix/media-library/panda.png
+/api/fs/media-library/panda.png
 ```
 
 ## Installation
@@ -179,7 +179,7 @@ const mediaLibrary = agent.requireService(MediaLibraryService);
 | `attach(agent: Agent, creationContext: AgentCreationContext): void` | Initialize `MediaLibraryState` on an agent and push the media directory to the creation context items |
 | `getOutputDirectoryName(): string` | Return the configured directory name relative to the workspace (e.g. `media-library`) |
 | `getOutputDirectory(): string` | Return the absolute path to the media library directory under the workspace |
-| `getServeDirectory(): string` | Return the path to the media library relative to the workspace directory, for FileSystemService ops and `/api/fs/{provider}/...` URLs |
+| `getServeDirectory(): string` | Return the path to the media library relative to the workspace directory, for FileSystemService ops and `/api/fs/...` URLs |
 | `getDefaultOutputDirectory(): string` | Deprecated — alias for `getOutputDirectory()` |
 | `getSelectedMedia(agent: Agent): { filename: string; kind?: MediaKind } \| null` | Return the currently selected media for an agent, or `null` |
 | `selectMedia(filename: string, agent: Agent, kind?: MediaKind): void` | Set the selected media filename and optional kind for an agent |
